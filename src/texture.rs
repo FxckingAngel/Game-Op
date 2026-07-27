@@ -99,6 +99,9 @@ impl TextureReducer {
     }
 
     fn optimize_texture(&self, input: &Path, output: &Path) -> io::Result<bool> {
+        if output_is_fresh(input, output) {
+            return Ok(false);
+        }
         let image = image::open(input).map_err(image_error)?;
         let (width, height) = image.dimensions();
         let max_size = max_size_for_texture(
@@ -155,24 +158,48 @@ fn max_size_for_texture(path: &Path, base: u32, preset: &str) -> u32 {
         "ultra-safe" => 1.5,
         _ => 1.0,
     };
-    let class_multiplier = if name.contains("normal")
-        || name.contains("_nrm")
-        || name.contains("face")
-        || name.contains("body")
-    {
+    let class_multiplier = if contains_any(
+        &name,
+        &[
+            "face",
+            "head",
+            "eye",
+            "skin",
+            "body",
+            "hair",
+            "cloth",
+            "albedo",
+            "diffuse",
+            "basecolor",
+        ],
+    ) {
         1.25
-    } else if name.contains("mask")
-        || name.contains("rough")
-        || name.contains("metal")
-        || name.contains("ao")
-    {
+    } else if contains_any(&name, &["normal", "_nrm", "bump"]) {
+        1.25
+    } else if contains_any(
+        &name,
+        &[
+            "mask",
+            "rough",
+            "roughness",
+            "metal",
+            "metallic",
+            "ao",
+            "occlusion",
+            "packed",
+        ],
+    ) {
         0.5
-    } else if name.contains("ui") || name.contains("icon") {
+    } else if contains_any(&name, &["ui", "icon", "font"]) {
         1.0
     } else {
         1.0
     };
     ((base as f32 * multiplier * class_multiplier).round() as u32).max(256)
+}
+
+fn contains_any(name: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| name.contains(needle))
 }
 
 fn resize_preserving_aspect(image: DynamicImage, max_side: u32) -> DynamicImage {
@@ -202,6 +229,15 @@ fn is_texture_file(path: &Path) -> bool {
             )
         })
         .unwrap_or(false)
+}
+
+fn output_is_fresh(input: &Path, output: &Path) -> bool {
+    match (fs::metadata(input), fs::metadata(output)) {
+        (Ok(input_meta), Ok(output_meta)) => {
+            output_meta.modified().ok() >= input_meta.modified().ok()
+        }
+        _ => false,
+    }
 }
 
 fn image_error(error: image::ImageError) -> io::Error {

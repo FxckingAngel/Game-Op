@@ -93,6 +93,9 @@ impl MeshReducer {
     }
 
     fn optimize_obj(&self, input: &Path, output: &Path) -> io::Result<bool> {
+        if output_is_fresh(input, output) {
+            return Ok(false);
+        }
         let source = fs::read_to_string(input)?;
         let optimized = compact_obj_positions(&source);
         let changed = optimized.len() < source.len();
@@ -116,6 +119,15 @@ impl MeshReducer {
             fs::copy(input, output)?;
         }
         Ok(changed)
+    }
+}
+
+fn output_is_fresh(input: &Path, output: &Path) -> bool {
+    match (fs::metadata(input), fs::metadata(output)) {
+        (Ok(input_meta), Ok(output_meta)) => {
+            output_meta.modified().ok() >= input_meta.modified().ok()
+        }
+        _ => false,
     }
 }
 

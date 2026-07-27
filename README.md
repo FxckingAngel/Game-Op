@@ -10,19 +10,20 @@ Game-Op is designed to optimize aggressively without intentionally destroying vi
 - Switch OS power behavior for the session where native tools expose it.
 - Set process priority through normal user-space scheduler controls.
 - Provide guarded integration points for GPU vendor per-application profiles and driver/OS upscaling.
-- Run live asset passes while the target game is open, so newly-added cache files can be optimized during the game session.
+- Run live asset passes while the target game is open, with unchanged texture/mesh/passthrough outputs skipped on later passes.
 - Accept a single `--asset-cache` / `--asset-output` pair for VRChat-like avatar/world cache trees, then route supported files through specialized optimizers.
 - Recursively build an optimized copy of texture assets, resizing PNG/JPEG/WebP files with quality presets and filename-aware classes such as face/body/normal/mask textures.
 - Recursively build an optimized copy of OBJ mesh assets by removing duplicate vertex-position records and comments without changing face geometry.
 - Inspect UnityFS/UnityWeb/UnityRaw bundle signatures and stage unsupported bundles, metadata, audio, shaders, and config files into the output tree unchanged so optimized caches stay complete.
 - Analyze VRChat-like cache mixes and print texture/mesh/bundle counts plus Intel iGPU recommendations.
+- Provide `--profile vrchat-hq-low-end` and `--profile vrchat-performance` presets so VRChat users can start with one flag.
 
 ## Usage
 
 ```bash
-cargo run -- --target VRChat --dry-run --once
-cargo run -- --target VRChat --asset-cache ./vrchat-cache --asset-output ./vrchat-cache-optimized --quality-preset high-quality-low-end --max-texture-size 1024 --live-asset-pass-seconds 15 --dry-run
-cargo run -- --target VRChat --asset-cache ./vrchat-cache --asset-output ./vrchat-cache-optimized --quality-preset high-quality-low-end --max-texture-size 1024
+cargo run -- --profile vrchat-hq-low-end --dry-run --once
+cargo run -- --profile vrchat-hq-low-end --asset-cache ./vrchat-cache --asset-output ./vrchat-cache-optimized --dry-run
+cargo run -- --profile vrchat-hq-low-end --asset-cache ./vrchat-cache --asset-output ./vrchat-cache-optimized
 ```
 
 Use `--dry-run` first. Some platform commands may require the same permissions that the operating system's own power or scheduler tools require.
@@ -32,7 +33,7 @@ Use `--dry-run` first. Some platform commands may require the same permissions t
 For a 4-thread Intel Core i3-7100U with Intel HD Graphics 620, start with:
 
 ```bash
-cargo run -- --target VRChat --asset-cache ./vrchat-cache --asset-output ./vrchat-cache-optimized --quality-preset high-quality-low-end --max-texture-size 1024 --live-asset-pass-seconds 15 --dry-run
+cargo run -- --profile vrchat-hq-low-end --asset-cache ./vrchat-cache --asset-output ./vrchat-cache-optimized --dry-run
 ```
 
 The default `high-quality-low-end` preset keeps face/body/normal textures sharper while reducing masks and other cheaper maps more aggressively. If VRAM or shared memory pressure remains high, lower `--max-texture-size` to `768` or `512`. If the game is already stable and you prefer sharper close-up avatar detail, raise it to `1536` or `2048` only for caches that fit in memory.

@@ -1,4 +1,7 @@
-use crate::unity_bundle;
+use crate::{
+    unity_bundle,
+    watch::{self, AssetRoute},
+};
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -115,15 +118,10 @@ fn copy_if_newer(input: &Path, output: &Path) -> io::Result<()> {
 }
 
 fn is_optimized_by_specialized_pass(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| {
-            matches!(
-                extension.to_ascii_lowercase().as_str(),
-                "png" | "jpg" | "jpeg" | "webp" | "obj"
-            )
-        })
-        .unwrap_or(false)
+    matches!(
+        watch::route_path(path),
+        AssetRoute::Texture | AssetRoute::Mesh
+    )
 }
 
 #[cfg(test)]
