@@ -9,6 +9,7 @@ pub struct TexturePolicy {
     pub cache_dir: Option<String>,
     pub output_dir: Option<String>,
     pub max_texture_size: u32,
+    pub quality_preset: String,
     pub dry_run: bool,
 }
 
@@ -100,8 +101,13 @@ impl TextureReducer {
     fn optimize_texture(&self, input: &Path, output: &Path) -> io::Result<bool> {
         let image = image::open(input).map_err(image_error)?;
         let (width, height) = image.dimensions();
+        let max_size = max_size_for_texture(
+            input,
+            self.policy.max_texture_size,
+            &self.policy.quality_preset,
+        );
         let largest_side = width.max(height);
-        let needs_resize = largest_side > self.policy.max_texture_size;
+        let needs_resize = largest_side > max_size;
 
         if self.policy.dry_run {
             if needs_resize {
@@ -110,7 +116,7 @@ impl TextureReducer {
                     input.display(),
                     width,
                     height,
-                    self.policy.max_texture_size
+                    max_size
                 );
             } else {
                 println!(
@@ -126,7 +132,7 @@ impl TextureReducer {
         }
 
         if needs_resize {
-            let resized = resize_preserving_aspect(image, self.policy.max_texture_size);
+            let resized = resize_preserving_aspect(image, max_size);
             save_image(&resized, output)?;
             Ok(true)
         } else {
@@ -134,6 +140,39 @@ impl TextureReducer {
             Ok(false)
         }
     }
+}
+
+fn max_size_for_texture(path: &Path, base: u32, preset: &str) -> u32 {
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let multiplier = match preset {
+        "performance" => 0.5,
+        "balanced" => 0.75,
+        "high-quality-low-end" => 1.0,
+        "ultra-safe" => 1.5,
+        _ => 1.0,
+    };
+    let class_multiplier = if name.contains("normal")
+        || name.contains("_nrm")
+        || name.contains("face")
+        || name.contains("body")
+    {
+        1.25
+    } else if name.contains("mask")
+        || name.contains("rough")
+        || name.contains("metal")
+        || name.contains("ao")
+    {
+        0.5
+    } else if name.contains("ui") || name.contains("icon") {
+        1.0
+    } else {
+        1.0
+    };
+    ((base as f32 * multiplier * class_multiplier).round() as u32).max(256)
 }
 
 fn resize_preserving_aspect(image: DynamicImage, max_side: u32) -> DynamicImage {
@@ -189,6 +228,7 @@ mod tests {
             cache_dir: Some(input.to_string_lossy().into_owned()),
             output_dir: Some(output.to_string_lossy().into_owned()),
             max_texture_size: 512,
+            quality_preset: "high-quality-low-end".to_string(),
             dry_run: false,
         });
 
@@ -197,6 +237,22 @@ mod tests {
         assert_eq!(report.optimized, 1);
         assert_eq!(optimized.dimensions(), (512, 256));
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn applies_quality_preset_by_texture_class() {
+        assert_eq!(
+            max_size_for_texture(Path::new("avatar_face.png"), 1024, "high-quality-low-end"),
+            1280
+        );
+        assert_eq!(
+            max_size_for_texture(Path::new("metal_mask.png"), 1024, "high-quality-low-end"),
+            512
+        );
+        assert_eq!(
+            max_size_for_texture(Path::new("world.png"), 1024, "performance"),
+            512
+        );
     }
 
     fn temp_path(name: &str) -> PathBuf {

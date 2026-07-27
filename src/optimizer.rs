@@ -1,4 +1,4 @@
-use crate::process::GameProcess;
+use crate::{gpu, process::GameProcess};
 use std::{io, process::Command};
 
 #[derive(Debug, Clone)]
@@ -96,7 +96,12 @@ impl Optimizer {
     }
 
     fn apply_gpu_profile(&self) -> io::Result<()> {
-        println!("GPU profile step: use vendor-supported per-app profiles for {} (NVIDIA/AMD/Intel UI-equivalent settings).", self.config.target_process);
+        let gpus = gpu::detect_gpus().unwrap_or_default();
+        println!(
+            "GPU profile step for {}: {}",
+            self.config.target_process,
+            gpu::recommendation_for(&gpus)
+        );
         Ok(())
     }
 

@@ -1,3 +1,4 @@
+use crate::unity_bundle;
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -73,6 +74,14 @@ impl AssetStager {
             if is_optimized_by_specialized_pass(&path) {
                 report.skipped_optimized_types += 1;
                 continue;
+            }
+            if unity_bundle::is_probable_bundle(&path) {
+                if let Ok(Some(info)) = unity_bundle::inspect_bundle(&path) {
+                    println!(
+                        "Unity bundle detected: {} ({}, safe passthrough)",
+                        info.path, info.signature
+                    );
+                }
             }
             let relative = path.strip_prefix(input_root).unwrap_or(&path);
             let output = output_root.join(relative);

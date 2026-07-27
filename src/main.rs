@@ -1,14 +1,17 @@
 mod assets;
+mod gpu;
 mod mesh;
 mod optimizer;
 mod process;
 mod texture;
+mod unity_bundle;
+mod vrchat;
 
 use assets::{AssetStagePolicy, AssetStager};
 use mesh::{MeshPolicy, MeshReducer};
 use optimizer::{Optimizer, SessionConfig};
 use process::ProcessWatcher;
-use std::{env, thread, time::Duration};
+use std::{env, path::Path, thread, time::Duration};
 use texture::{TexturePolicy, TextureReducer};
 
 fn main() {
@@ -30,6 +33,8 @@ fn main() {
     let live_asset_pass_seconds = value_after(&args, "--live-asset-pass-seconds")
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(30);
+    let quality_preset = value_after(&args, "--quality-preset")
+        .unwrap_or_else(|| "high-quality-low-end".to_string());
     let max_texture_size = value_after(&args, "--max-texture-size")
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(1024);
@@ -49,6 +54,7 @@ fn main() {
         cache_dir,
         output_dir,
         max_texture_size,
+        quality_preset,
         dry_run,
     });
     let mesh_reducer = MeshReducer::new(MeshPolicy {
@@ -57,10 +63,15 @@ fn main() {
         dry_run,
     });
     let asset_stager = AssetStager::new(AssetStagePolicy {
-        cache_dir: asset_cache_dir,
+        cache_dir: asset_cache_dir.clone(),
         output_dir: asset_output_dir,
         dry_run,
     });
+    if let Some(asset_cache) = &asset_cache_dir {
+        if let Ok(report) = vrchat::analyze_cache(Path::new(asset_cache), max_texture_size) {
+            vrchat::print_recommendations(&report);
+        }
+    }
 
     println!("Game-Op watching for {target} (dry_run={dry_run})");
     loop {
@@ -116,7 +127,7 @@ fn default_target() -> &'static str {
 }
 
 fn print_help() {
-    println!("Game-Op\n\nUsage: game-op [--target PROCESS] [--asset-cache PATH] [--asset-output PATH] [--texture-cache PATH] [--texture-output PATH] [--mesh-cache PATH] [--mesh-output PATH] [--max-texture-size PX] [--live-asset-pass-seconds SECONDS] [--dry-run] [--once]\n\nWatches for a game process, applies reversible OS/driver-level performance settings, and optionally prepares a creator-safe texture-cache reduction pass outside the game process.");
+    println!("Game-Op\n\nUsage: game-op [--target PROCESS] [--asset-cache PATH] [--asset-output PATH] [--texture-cache PATH] [--texture-output PATH] [--mesh-cache PATH] [--mesh-output PATH] [--quality-preset PRESET] [--max-texture-size PX] [--live-asset-pass-seconds SECONDS] [--dry-run] [--once]\n\nWatches for a game process, applies reversible OS/driver-level performance settings, and optionally prepares a creator-safe texture-cache reduction pass outside the game process.");
 }
 
 fn run_asset_pass(
