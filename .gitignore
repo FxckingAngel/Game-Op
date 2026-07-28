@@ -5,4 +5,5 @@ mitmproxy-ca-cert.pem
 *.c
 build/
 *.so
+*.pyc
 _setup_*_temp.py
