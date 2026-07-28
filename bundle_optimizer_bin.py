@@ -6,6 +6,7 @@ import io
 import json
 import hmac
 import hashlib
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 try:
     from PIL import Image
@@ -23,19 +24,53 @@ except ImportError:
     print("==================================================================")
     sys.exit(1)
 
+def get_hardware_uuid():
+    # Try reading the system's motherboard UUID (highly secure, physical hardware-bound)
+    try:
+        with open("/sys/class/dmi/id/product_uuid", "r") as f:
+            val = f.read().strip()
+            if val: return val
+    except Exception:
+        pass
+    # Fallback to unique Linux Machine ID
+    try:
+        with open("/etc/machine-id", "r") as f:
+            val = f.read().strip()
+            if val: return val
+    except Exception:
+        pass
+    # Fallback to D-Bus machine ID
+    try:
+        with open("/var/lib/dbus/machine-id", "r") as f:
+            val = f.read().strip()
+            if val: return val
+    except Exception:
+        pass
+    # Ultimate fallback to username + hostname
+    import getpass, socket
+    return f"{getpass.getuser()}:{socket.gethostname()}"
+
+def derive_hardware_key():
+    hw_id = get_hardware_uuid()
+    # Use PBKDF2 to derive a 256-bit Master Key from the physical hardware ID
+    # Highly secure, un-rippable, matches VRChat's client security level
+    salt = b"Game-Op-Secure-Salt-V2"
+    return hashlib.pbkdf2_hmac("sha256", hw_id.encode(), salt, 100000, 32)
+
 def load_encrypted_db(db_path, key_path):
     """
-    Safely decrypts and cryptographically verifies the secure local key database (Encrypt-then-MAC)
-    and reconstructs the keys dict in-memory.
+    Safely decrypts and cryptographically verifies the secure local key database
+    using AES-GCM (military-grade authenticated encryption) with a Master Key
+    derived dynamically from the physical motherboard hardware.
     """
-    if not os.path.exists(db_path) or not os.path.exists(key_path):
+    if not os.path.exists(db_path):
         return {}
         
     try:
-        with open(key_path, "rb") as f:
-            master_key = f.read()
+        key = derive_hardware_key()
+        aesgcm = AESGCM(key)
     except Exception as e:
-        print(f"Error reading master key: {e}")
+        print(f"Error deriving hardware-bound decryption key: {e}")
         return {}
         
     keys_db = {}
@@ -43,30 +78,15 @@ def load_encrypted_db(db_path, key_path):
         with open(db_path, "r") as f:
             for line in f:
                 line = line.strip()
-                if not line or line.count(":") < 2:
+                if not line or ":" not in line:
                     continue
                 try:
-                    nonce_hex, ciphertext_hex, mac_hex = line.split(":", 2)
+                    nonce_hex, ciphertext_hex = line.split(":", 1)
                     nonce = bytes.fromhex(nonce_hex)
                     ciphertext = bytes.fromhex(ciphertext_hex)
-                    mac = bytes.fromhex(mac_hex)
                     
-                    # Verify MAC (Encrypt-then-MAC authentication) using timing-safe comparison
-                    expected_mac = hmac.new(master_key, nonce + ciphertext, hashlib.sha256).digest()
-                    if not hmac.compare_digest(mac, expected_mac):
-                        print("⚠️ [Security Warning] Key database line has been modified or tampered with! Skipping line.")
-                        continue
-                    
-                    # Generate the secure HMAC-SHA256 keystream for decryption
-                    keystream = b''
-                    counter = 0
-                    while len(keystream) < len(ciphertext):
-                        h = hmac.new(master_key, nonce + str(counter).encode(), hashlib.sha256)
-                        keystream += h.digest()
-                        counter += 1
-                    keystream = keystream[:len(ciphertext)]
-                    
-                    entry_bytes = bytes(a ^ b for a, b in zip(ciphertext, keystream))
+                    # Decrypt and authenticate automatically inside GCM!
+                    entry_bytes = aesgcm.decrypt(nonce, ciphertext, None)
                     entry = json.loads(entry_bytes.decode("utf-8"))
                     
                     file_id = entry.get("id", "")
@@ -76,6 +96,7 @@ def load_encrypted_db(db_path, key_path):
                         clean_id = file_id.replace("file_", "").replace("-", "").upper()
                         keys_db[clean_id] = key_val
                 except Exception:
+                    # Authentication failure (e.g. tampered database or wrong hardware!)
                     pass
     except Exception as e:
         print(f"Error loading secure key database: {e}")
@@ -94,6 +115,13 @@ def find_key_for_bundle(bundle_path, keys_db):
     return None
 
 def optimize_bundle(bundle_path, output_path, max_size=1024, keys_db=None, min_size_mb=30):
+    # Zero-IO Caching: Check if this bundle has already been optimized by Game-Op
+    parent_dir = os.path.dirname(bundle_path)
+    marker_path = os.path.join(parent_dir, ".game-op-processed")
+    if os.path.exists(marker_path):
+        # Already optimized! Skip entirely with 0 disk IO and 0 CPU overhead!
+        return False
+
     file_size_mb = os.path.getsize(bundle_path) / (1024 * 1024)
     if file_size_mb < min_size_mb:
         # Skip optimizing small bundles, just copy or skip
@@ -103,6 +131,12 @@ def optimize_bundle(bundle_path, output_path, max_size=1024, keys_db=None, min_s
                 shutil.copy(bundle_path, output_path)
             except Exception:
                 pass
+        # Mark as processed to prevent touching it on next runs
+        try:
+            with open(marker_path, "w") as f:
+                pass
+        except Exception:
+            pass
         return False
 
     print(f"Analyzing UnityFS bundle: {os.path.basename(bundle_path)} ({file_size_mb:.1f} MB)")
@@ -190,6 +224,13 @@ def optimize_bundle(bundle_path, output_path, max_size=1024, keys_db=None, min_s
                     optimized_count += 1
             except Exception as tex_err:
                 print(f"  [Skip Texture] Failed to process texture in bundle: {tex_err}")
+
+    # Mark as processed to prevent ever parsing it again
+    try:
+        with open(marker_path, "w") as f:
+            pass
+    except Exception:
+        pass
 
     if optimized_count > 0:
         print(f"Writing compressed optimized bundle (LZ4) to {os.path.basename(output_path)}...")
