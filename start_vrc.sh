@@ -47,7 +47,8 @@ fi
 pkill -f mitmdump || true
 pkill -f mitmproxy || true
 echo "🧹 Cleanly terminating any running/hung Steam, VRChat, or Crash Handler processes..."
-pkill -9 steam || true
+pkill -9 -f steam || true
+pkill -9 -f steamwebhelper || true
 pkill -f VRChat || true
 pkill -f UnityCrashHandler64 || true
 pkill -f start_protected_game || true
