@@ -22,6 +22,12 @@ if [ -f "asset_key_resolver_bin.py" ] || [ -f "bundle_optimizer_bin.py" ]; then
     ./compile_binaries.sh
 fi
 
+# Ensure the high-performance Rust booster binary is compiled and up-to-date
+if command -v cargo &> /dev/null; then
+    echo "⚙️ Verifying and compiling high-performance Rust booster..."
+    cargo build --release > /dev/null 2>&1 || true
+fi
+
 echo "=================================================================="
 echo " 🚀 Starting Game-Op Ultimate VRChat Session..."
 echo "=================================================================="
@@ -179,6 +185,28 @@ if os.path.exists(local_low):
                 os.chmod(os.path.join(root, f), 0o644)
             except Exception:
                 pass
+
+    # Clean up old massive VRChat output log files to free up disk space and reduce IO load
+    vrc_log_dir = os.path.join(local_low, 'VRChat/VRChat')
+    if os.path.exists(vrc_log_dir) and os.path.isdir(vrc_log_dir):
+        import time
+        deleted_logs_count = 0
+        freed_bytes = 0
+        now = time.time()
+        for f in os.listdir(vrc_log_dir):
+            if f.startswith('output_log_') and f.endswith('.txt'):
+                fp = os.path.join(vrc_log_dir, f)
+                try:
+                    # Remove files older than 3 days
+                    if os.path.isfile(fp) and (now - os.path.getmtime(fp)) > (3 * 86400):
+                        freed_bytes += os.path.getsize(fp)
+                        os.remove(fp)
+                        deleted_logs_count += 1
+                except Exception:
+                    pass
+        if deleted_logs_count > 0:
+            print(f'  🧹 [Self-Healing] Cleansed {deleted_logs_count} old VRChat output logs, freeing up {freed_bytes / (1024*1024):.2f} MB!')
+
     print('✅ AppData LocalLow folders self-healed and permissions restored successfully!')
 "
 fi
@@ -206,11 +234,21 @@ if [ -f "./target/release/game-op" ]; then
     ./target/release/game-op --revert-cache > /dev/null 2>&1 || true
 fi
 
-# 5. Start the headless proxy sniffer in the background with selective host bypass
-# We partition the CPU cores: bind the background proxy strictly to physical Core 1 (threads 2,3) using taskset
+# 5. Detect number of logical CPU cores and configure fail-safe scheduling partitioning
+CORES=$(nproc 2>/dev/null || echo 4)
+USE_TASKSET=false
+if command -v taskset &> /dev/null && [ "$CORES" -ge 4 ]; then
+    USE_TASKSET=true
+    echo "⚡ [Scheduler] Multi-core system detected ($CORES cores). Enabling dual-core CPU partitioning..."
+else
+    echo "💡 [Scheduler] Dual-core or limited CPU detected ($CORES cores). Running in safe normal scheduler mode..."
+fi
+
+# Start the headless proxy sniffer in the background with selective host bypass
+# If partitioning is active, bind the background proxy strictly to physical Core 1 (threads 2,3)
 # This guarantees that proxy operations never compete with the main game loop for CPU cycles!
 echo "🔒 Starting secure key sniffer proxy (silent mode on port $PROXY_PORT)..."
-if command -v taskset &> /dev/null; then
+if [ "$USE_TASKSET" = true ]; then
     taskset -c 2,3 mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" > sniffer.log 2>&1 &
 else
     mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" > sniffer.log 2>&1 &
@@ -256,11 +294,11 @@ cleanup() {
     echo "=================================================================="
     if [ -n "$LIVE_OPT_PID" ]; then
         echo "Stopping background live bundle optimizer (PID $LIVE_OPT_PID)..."
-        kill "$LIVE_OPT_PID" || true
+        kill "$LIVE_OPT_PID" > /dev/null 2>&1 || true
     fi
     if [ -n "$PROXY_PID" ]; then
         echo "Stopping secure sniffer proxy (PID $PROXY_PID)..."
-        kill "$PROXY_PID" || true
+        kill "$PROXY_PID" > /dev/null 2>&1 || true
     fi
 }
 trap cleanup EXIT
@@ -280,10 +318,10 @@ echo ""
 # This ensures VRChat has a completely dedicated physical CPU core with zero context-switching latency!
 echo "🎮 Launching Steam..."
 echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exactly:"
-echo "   SSL_CERT_FILE=/home/koronet/Game-Op/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud %command%"
+echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud %command%"
 echo ""
 
-if command -v taskset &> /dev/null; then
+if [ "$USE_TASKSET" = true ]; then
     taskset -c 0,1 steam steam://rungameid/438100 > /dev/null 2>&1 &
 else
     steam steam://rungameid/438100 > /dev/null 2>&1 &

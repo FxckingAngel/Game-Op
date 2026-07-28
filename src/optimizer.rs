@@ -79,20 +79,33 @@ impl Optimizer {
 
     fn set_priority(&self, pid: u32) -> io::Result<()> {
         if cfg!(target_os = "windows") {
-            self.run(CommandSpec::new(
+            if let Err(e) = self.run(CommandSpec::new(
                 "powershell",
                 &[
                     "-NoProfile",
                     "-Command",
                     &format!("(Get-Process -Id {pid}).PriorityClass='High'"),
                 ],
-            ))
+            )) {
+                println!("⚠️  [Optimizer] Failed to set process priority on Windows: {}", e);
+            }
         } else {
-            self.run(CommandSpec::new(
+            // Try renice. Since standard users cannot set negative nice values (-5),
+            // it may fail with permission denied. If so, print a warning instead of aborting the whole run.
+            match self.run(CommandSpec::new(
                 "renice",
                 &["-n", "-5", "-p", &pid.to_string()],
-            ))
+            )) {
+                Ok(_) => {
+                    println!("🚀 [Optimizer] Elevated process {pid} priority (renice -5) successfully.");
+                }
+                Err(e) => {
+                    println!("⚠️  [Optimizer] Failed to elevate priority via renice (requires root or CAP_SYS_NICE): {}", e);
+                    println!("💡 [Optimizer] Continuing with standard priority levels.");
+                }
+            }
         }
+        Ok(())
     }
 
     fn apply_gpu_profile(&self) -> io::Result<()> {
