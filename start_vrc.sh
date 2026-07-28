@@ -240,6 +240,14 @@ echo "🔒 Starting secure key sniffer proxy (silent mode on port $PROXY_PORT)..
 mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" --ignore-hosts "^(files|assets|images|pipeline)\.vrchat\.cloud|^(.+\.)?amplitude\.com|^(.+\.)?cloudfront\.net" > sniffer.log 2>&1 &
 PROXY_PID=$!
 
+# Pin the background proxy strictly to logical CPU Core 1
+# This prevents the proxy thread from context-switching onto Core 0 where VRChat's critical rendering loop runs!
+# No root privileges are required to change CPU affinity for our own processes.
+if command -v taskset &> /dev/null; then
+    echo "⚡ [Scheduler] Isolating background proxy thread to logical CPU Core 1..."
+    taskset -p -c 1 $PROXY_PID > /dev/null 2>&1 || true
+fi
+
 # Start a background live bundle optimizer loop
 # It utilizes Linux kernel 'inotify' interrupts to detect completed downloads instantly,
 # optimizing assets in-place in microseconds before VRChat's renderer loads them!
