@@ -298,9 +298,8 @@ echo "  all_proxy:   $all_proxy"
 echo "  no_proxy:    $no_proxy"
 echo ""
 
-# 7. Launch Steam with complete proxy and SSL certificate integration (avoids freezing)
-# We partition the CPU cores: bind Steam and VRChat strictly to physical Core 0 (threads 0,1) using taskset
-# This ensures VRChat has a completely dedicated physical CPU core with zero context-switching latency!
+# 7. Launch Steam normally with full scheduler freedom (prevents deadlocks on dual-core systems)
+# We avoid binding Steam or the game to specific CPU cores, allowing the Linux kernel to schedule threads dynamically.
 echo "🎮 Launching Steam..."
 echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exactly:"
 echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud %command%"
