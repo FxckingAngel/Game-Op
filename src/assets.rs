@@ -19,6 +19,7 @@ pub struct AssetStageReport {
     pub scanned: usize,
     pub staged: usize,
     pub skipped_optimized_types: usize,
+    pub copied: usize,
 }
 
 pub struct AssetStager {
@@ -49,13 +50,16 @@ impl AssetStager {
             .unwrap_or_else(|| input_root.with_extension("game-op-assets-optimized"));
         let mut report = AssetStageReport::default();
         self.walk(&input_root, &input_root, &output_root, &mut report)?;
-        println!(
-            "Asset stage complete: scanned={}, staged={}, skipped_optimized_types={}, output={}",
-            report.scanned,
-            report.staged,
-            report.skipped_optimized_types,
-            output_root.display()
-        );
+        if report.copied > 0 {
+            println!(
+                "Asset stage complete: scanned={}, staged={}, skipped_optimized_types={}, copied={}, output={}",
+                report.scanned,
+                report.staged,
+                report.skipped_optimized_types,
+                report.copied,
+                output_root.display()
+            );
+        }
         Ok(report)
     }
 
@@ -88,21 +92,25 @@ impl AssetStager {
             }
             let relative = path.strip_prefix(input_root).unwrap_or(&path);
             let output = output_root.join(relative);
+            let mut did_copy = false;
             if self.policy.dry_run {
                 println!("dry-run: would stage passthrough asset {}", path.display());
             } else {
                 if let Some(parent) = output.parent() {
                     fs::create_dir_all(parent)?;
                 }
-                copy_if_newer(&path, &output)?;
+                did_copy = copy_if_newer(&path, &output)?;
             }
             report.staged += 1;
+            if did_copy {
+                report.copied += 1;
+            }
         }
         Ok(())
     }
 }
 
-fn copy_if_newer(input: &Path, output: &Path) -> io::Result<()> {
+fn copy_if_newer(input: &Path, output: &Path) -> io::Result<bool> {
     let should_copy = match (fs::metadata(input), fs::metadata(output)) {
         (Ok(input_meta), Ok(output_meta)) => {
             input_meta.modified().ok() > output_meta.modified().ok()
@@ -113,8 +121,10 @@ fn copy_if_newer(input: &Path, output: &Path) -> io::Result<()> {
     };
     if should_copy {
         fs::copy(input, output)?;
+        Ok(true)
+    } else {
+        Ok(false)
     }
-    Ok(())
 }
 
 fn is_optimized_by_specialized_pass(path: &Path) -> bool {

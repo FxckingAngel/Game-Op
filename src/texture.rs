@@ -109,14 +109,16 @@ impl TextureReducer {
             }
         }
 
-        println!(
-            "Texture cache complete: scanned={}, optimized={}, copied={}, skipped={}, output={}",
-            report.scanned,
-            report.optimized,
-            report.copied,
-            report.skipped,
-            output_root.display()
-        );
+        if self.policy.verbose || report.optimized > 0 {
+            println!(
+                "Texture cache complete: scanned={}, optimized={}, copied={}, skipped={}, output={}",
+                report.scanned,
+                report.optimized,
+                report.copied,
+                report.skipped,
+                output_root.display()
+            );
+        }
         Ok(report)
     }
 

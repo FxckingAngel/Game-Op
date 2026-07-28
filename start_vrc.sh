@@ -341,10 +341,21 @@ echo ""
 # We avoid binding Steam or the game to specific CPU cores, allowing the Linux kernel to schedule threads dynamically.
 echo "🎮 Launching Steam..."
 echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exactly:"
-echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud %command%"
+echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud DXVK_CONFIG_FILE=$DIR/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_GL_THREAD_CHANNEL=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%"
 echo ""
 
-steam steam://rungameid/438100 > /dev/null 2>&1 &
+(
+    # Unset all game-specific performance variables to guarantee Steam client stability and prevent Chromium/steamwebhelper crashes!
+    unset DXVK_CONFIG_FILE
+    unset DXVK_ASYNC
+    unset DXVK_FRAME_PACE
+    unset mesa_glthread
+    unset MESA_GL_THREAD_CHANNEL
+    unset MESA_NO_ERROR
+    unset INTEL_PRECISE_TRIG
+    
+    steam steam://rungameid/438100 > /dev/null 2>&1 &
+)
 
 # 8. Launch the Rust thread booster (blocks until VRChat exits)
 echo "⚡ Starting Game-Op OS booster & process priority tracker..."
