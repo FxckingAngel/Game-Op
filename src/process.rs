@@ -18,22 +18,39 @@ impl ProcessWatcher {
     pub fn find(&self) -> io::Result<Option<GameProcess>> {
         self.processes().map(|processes| {
             processes.into_iter().find(|process| {
-                let name_lower = process.name.to_ascii_lowercase();
+                // Extract only the file name of the executable (splitting by UNIX / and Windows \ paths)
+                let file_name = process.name
+                    .split('/')
+                    .last()
+                    .unwrap_or(&process.name)
+                    .split('\\')
+                    .last()
+                    .unwrap_or(&process.name);
+                
+                let file_name_lower = file_name.to_ascii_lowercase();
+                let target_lower = self.target.to_ascii_lowercase();
                 
                 // Exclude Steam launcher, Proton wrappers, and our own proxy/optimizer to prevent false-positives
-                if name_lower.contains("steam-launch-wrapper")
-                    || name_lower.contains("reaper")
-                    || name_lower.contains("pressure-vessel")
-                    || name_lower.contains("proton waitforexitandrun")
-                    || name_lower.contains("mitmdump")
-                    || name_lower.contains("key_sniffer")
-                    || name_lower.contains("game-op")
+                if file_name_lower.contains("steam-launch-wrapper")
+                    || file_name_lower.contains("reaper")
+                    || file_name_lower.contains("pressure-vessel")
+                    || file_name_lower.contains("proton waitforexitandrun")
+                    || file_name_lower.contains("mitmdump")
+                    || file_name_lower.contains("key_sniffer")
+                    || file_name_lower.contains("game-op")
+                    || file_name_lower.contains("launch")
+                    || file_name_lower.contains("protected")
+                    || file_name_lower.contains("crash")
                 {
                     return false;
                 }
 
-                process.name.eq_ignore_ascii_case(&self.target)
-                    || name_lower.contains(&self.target.to_ascii_lowercase())
+                file_name_lower == target_lower
+                    || file_name_lower == target_lower.trim_end_matches(".exe")
+                    || (file_name_lower.contains(&target_lower) 
+                        && !file_name_lower.contains("launch") 
+                        && !file_name_lower.contains("protected")
+                        && !file_name_lower.contains("crash"))
             })
         })
     }

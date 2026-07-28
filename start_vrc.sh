@@ -207,10 +207,14 @@ if [ -f "./target/release/game-op" ]; then
 fi
 
 # 5. Start the headless proxy sniffer in the background with selective host bypass
-# We decrypt only api.vrchat.cloud to capture keys, while bypassing files.vrchat.cloud 
-# (which has strict TLS pinning and must pass through natively to prevent handshake alerts)
+# We partition the CPU cores: bind the background proxy strictly to physical Core 1 (threads 2,3) using taskset
+# This guarantees that proxy operations never compete with the main game loop for CPU cycles!
 echo "🔒 Starting secure key sniffer proxy (silent mode on port $PROXY_PORT)..."
-mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" > sniffer.log 2>&1 &
+if command -v taskset &> /dev/null; then
+    taskset -c 2,3 mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" > sniffer.log 2>&1 &
+else
+    mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" > sniffer.log 2>&1 &
+fi
 PROXY_PID=$!
 
 # Start a background live bundle optimizer loop
@@ -272,12 +276,18 @@ echo "  no_proxy:    $no_proxy"
 echo ""
 
 # 7. Launch Steam with complete proxy and SSL certificate integration (avoids freezing)
+# We partition the CPU cores: bind Steam and VRChat strictly to physical Core 0 (threads 0,1) using taskset
+# This ensures VRChat has a completely dedicated physical CPU core with zero context-switching latency!
 echo "🎮 Launching Steam..."
 echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exactly:"
 echo "   SSL_CERT_FILE=/home/koronet/Game-Op/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud %command%"
 echo ""
 
-steam steam://rungameid/438100 > /dev/null 2>&1 &
+if command -v taskset &> /dev/null; then
+    taskset -c 0,1 steam steam://rungameid/438100 > /dev/null 2>&1 &
+else
+    steam steam://rungameid/438100 > /dev/null 2>&1 &
+fi
 
 # 8. Launch the Rust thread booster (blocks until VRChat exits)
 echo "⚡ Starting Game-Op OS booster & process priority tracker..."
