@@ -234,25 +234,10 @@ if [ -f "./target/release/game-op" ]; then
     ./target/release/game-op --revert-cache > /dev/null 2>&1 || true
 fi
 
-# 5. Detect number of logical CPU cores and configure fail-safe scheduling partitioning
-CORES=$(nproc 2>/dev/null || echo 4)
-USE_TASKSET=false
-if command -v taskset &> /dev/null && [ "$CORES" -ge 4 ]; then
-    USE_TASKSET=true
-    echo "⚡ [Scheduler] Multi-core system detected ($CORES cores). Enabling dual-core CPU partitioning..."
-else
-    echo "💡 [Scheduler] Dual-core or limited CPU detected ($CORES cores). Running in safe normal scheduler mode..."
-fi
-
-# Start the headless proxy sniffer in the background with selective host bypass
-# If partitioning is active, bind the background proxy strictly to physical Core 1 (threads 2,3)
-# This guarantees that proxy operations never compete with the main game loop for CPU cycles!
+# 5. Start the headless proxy sniffer in the background with selective host bypass
+# We ignore high-overhead CDNs and analytics at the TCP level to guarantee native loading speeds!
 echo "🔒 Starting secure key sniffer proxy (silent mode on port $PROXY_PORT)..."
-if [ "$USE_TASKSET" = true ]; then
-    taskset -c 2,3 mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" --ignore-hosts "^(files|assets|images|pipeline)\.vrchat\.cloud|^(.+\.)?amplitude\.com|^(.+\.)?cloudfront\.net" > sniffer.log 2>&1 &
-else
-    mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" --ignore-hosts "^(files|assets|images|pipeline)\.vrchat\.cloud|^(.+\.)?amplitude\.com|^(.+\.)?cloudfront\.net" > sniffer.log 2>&1 &
-fi
+mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" --ignore-hosts "^(files|assets|images|pipeline)\.vrchat\.cloud|^(.+\.)?amplitude\.com|^(.+\.)?cloudfront\.net" > sniffer.log 2>&1 &
 PROXY_PID=$!
 
 # Start a background live bundle optimizer loop
@@ -321,11 +306,7 @@ echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exact
 echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud %command%"
 echo ""
 
-if [ "$USE_TASKSET" = true ]; then
-    taskset -c 0,1 steam steam://rungameid/438100 > /dev/null 2>&1 &
-else
-    steam steam://rungameid/438100 > /dev/null 2>&1 &
-fi
+steam steam://rungameid/438100 > /dev/null 2>&1 &
 
 # 8. Launch the Rust thread booster (blocks until VRChat exits)
 echo "⚡ Starting Game-Op OS booster & process priority tracker..."
