@@ -8,6 +8,10 @@ set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"
 
+# Clean up any legacy, conflicting Cython .so or .c binaries from previous versions
+# This completely prevents Python 3.14 import errors and AttributeErrors!
+rm -f "$DIR"/*.so "$DIR"/*.c > /dev/null 2>&1 || true
+
 # Prepend ~/.local/bin to PATH to ensure user-installed mitmdump is found
 export PATH="$HOME/.local/bin:$PATH"
 

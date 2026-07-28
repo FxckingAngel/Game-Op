@@ -27,6 +27,14 @@ if os.path.exists(source_path):
     except Exception as e:
         print(f"⚠️ Warning: Failed to compile local bytecode: {e}")
 
+# Clean up any legacy, conflicting Cython .so files before importing to prevent Python 3.14 crashes
+for f in os.listdir(DIR):
+    if f.startswith("bundle_optimizer_bin") and f.endswith(".so"):
+        try:
+            os.remove(os.path.join(DIR, f))
+        except Exception:
+            pass
+
 try:
     import bundle_optimizer_bin
     load_encrypted_db = bundle_optimizer_bin.load_encrypted_db
