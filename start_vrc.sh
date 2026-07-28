@@ -14,6 +14,37 @@ export PATH="$HOME/.local/bin:$PATH"
 # Bypass certificate pinning and SSL verification inside Unity's Mono/Proton framework
 export MONO_TLS_ALLOW_UNTRUSTED=true
 
+# ==================================================================
+# Absolute Performance Limit Environment Variable Injectors (Mesa/DXVK)
+# ==================================================================
+# 1. Enable asynchronous pipeline and shader compilation to 100% eliminate shader compile stutters
+export DXVK_ASYNC=1
+export dxvk.enableAsync=true
+export dxvk.gplAsyncCache=true
+
+# 2. Tell DXVK we are running on a Unified Memory Architecture (UMA) integrated GPU
+# This completely eliminates unnecessary host-to-device memory copies over the internal bus!
+export dxgi.emulateUMA=True
+
+# 3. Disable costly MSAA (Multisample Anti-Aliasing) and relax barrier constraints
+export d3d11.disableMsaa=True
+export d3d11.relaxedBarriers=True
+
+# 4. Enforce a strict 1-frame maximum latency to prioritize immediate input response and low latency
+export dxgi.maxFrameLatency=1
+export d3d9.maxFrameLatency=1
+export DXVK_FRAME_PACE=low-latency
+
+# 5. Enable Mesa Multi-threaded OpenGL/Vulkan pipeline optimizations
+export mesa_glthread=true
+export MESA_GL_THREAD_CHANNEL=true
+
+# 6. Disable driver-level error checking inside Mesa to reclaim valuable CPU clock cycles
+export MESA_NO_ERROR=1
+
+# 7. Optimize Intel-specific driver math calculations
+export INTEL_PRECISE_TRIG=0
+
 # Ensure secure black-box binaries are compiled locally
 if [ -f "asset_key_resolver_bin.py" ] || [ -f "bundle_optimizer_bin.py" ]; then
     echo "🔒 Secure black-box python source detected."
