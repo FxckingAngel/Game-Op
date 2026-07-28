@@ -1,0 +1,16 @@
+[package]
+name = "game-op"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform game performance session optimizer"
+license = "MIT"
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

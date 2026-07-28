@@ -1,0 +1,8 @@
+/target/
+__pycache__/
+*.log
+mitmproxy-ca-cert.pem
+*.c
+build/
+*.so
+_setup_*_temp.py
