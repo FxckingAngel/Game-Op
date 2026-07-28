@@ -80,26 +80,23 @@ if command -v lsof &> /dev/null; then
     lsof -t -i :$PROXY_PORT | xargs kill -9 > /dev/null 2>&1 || true
 fi
 
-# 2. Clean up any leftover background proxies, Steam, and hung game/crash handler processes gracefully
+# 2. Clean up any leftover background proxies and hung game/crash handler processes gracefully
 pkill -f mitmdump || true
 pkill -f mitmproxy || true
-echo "🧹 Safely shutting down Steam, VRChat, or Crash Handler background processes..."
-# Gracefully shutdown Steam first to prevent core dumps and stale locks
-steam -shutdown > /dev/null 2>&1 || true
+echo "🧹 Safely cleaning up VRChat and Crash Handler background processes..."
 pkill -f VRChat || true
 pkill -f UnityCrashHandler64 || true
 pkill -f start_protected_game || true
-sleep 1.5
+sleep 0.5
 
-# If any still remain, close them standardly (no -9 force-kill to avoid DrKonqi crashes)
-pkill -f steamwebhelper || true
-pkill -f steam || true
-
-# 3. Cleanse any stale Steam lock files to prevent startup freezes and client blockages
-echo "🧹 Cleansing stale Steam lock files..."
-rm -f "$HOME/.steam/steam.pid" > /dev/null 2>&1 || true
-rm -f "$HOME/.steam/steam/steam.pid" > /dev/null 2>&1 || true
-rm -f "$HOME/.local/share/Steam/steam.pid" > /dev/null 2>&1 || true
+# 3. Cleanse any stale Steam lock files ONLY if Steam is not currently running
+# This prevents startup locks without force-closing Steam if you already have it open!
+if ! pgrep -x "steam" > /dev/null; then
+    echo "🧹 Steam is not running. Cleansing stale Steam lock files..."
+    rm -f "$HOME/.steam/steam.pid" > /dev/null 2>&1 || true
+    rm -f "$HOME/.steam/steam/steam.pid" > /dev/null 2>&1 || true
+    rm -f "$HOME/.local/share/Steam/steam.pid" > /dev/null 2>&1 || true
+fi
 
 # 4. Dynamically locate VRChat's Proton Wine prefix path and cleanse any legacy persistent global Wine proxy settings
 # This ensures that standard HTTP/HTTPS CDN and image loaders bypass the proxy and run at native gigabit speed!
@@ -337,25 +334,29 @@ echo "  all_proxy:   $all_proxy"
 echo "  no_proxy:    $no_proxy"
 echo ""
 
-# 7. Launch Steam normally with full scheduler freedom (prevents deadlocks on dual-core systems)
-# We avoid binding Steam or the game to specific CPU cores, allowing the Linux kernel to schedule threads dynamically.
-echo "🎮 Launching Steam..."
-echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exactly:"
-echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud DXVK_CONFIG_FILE=$DIR/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_GL_THREAD_CHANNEL=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%"
-echo ""
-
-(
-    # Unset all game-specific performance variables to guarantee Steam client stability and prevent Chromium/steamwebhelper crashes!
-    unset DXVK_CONFIG_FILE
-    unset DXVK_ASYNC
-    unset DXVK_FRAME_PACE
-    unset mesa_glthread
-    unset MESA_GL_THREAD_CHANNEL
-    unset MESA_NO_ERROR
-    unset INTEL_PRECISE_TRIG
-    
+# 7. Launch Steam / VRChat safely (prevents deadlocks and avoids restarting Steam if already running)
+if pgrep -x "steam" > /dev/null; then
+    echo "🎮 Steam is already running! Sending launch command for VRChat..."
     steam steam://rungameid/438100 > /dev/null 2>&1 &
-)
+else
+    echo "🎮 Launching Steam..."
+    echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exactly:"
+    echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud DXVK_CONFIG_FILE=$DIR/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_GL_THREAD_CHANNEL=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%"
+    echo ""
+
+    (
+        # Unset all game-specific performance variables to guarantee Steam client stability and prevent Chromium/steamwebhelper crashes!
+        unset DXVK_CONFIG_FILE
+        unset DXVK_ASYNC
+        unset DXVK_FRAME_PACE
+        unset mesa_glthread
+        unset MESA_GL_THREAD_CHANNEL
+        unset MESA_NO_ERROR
+        unset INTEL_PRECISE_TRIG
+        
+        steam steam://rungameid/438100 > /dev/null 2>&1 &
+    )
+fi
 
 # 8. Launch the Rust thread booster (blocks until VRChat exits)
 echo "⚡ Starting Game-Op OS booster & process priority tracker..."
