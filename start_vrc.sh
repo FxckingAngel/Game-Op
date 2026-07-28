@@ -249,9 +249,9 @@ fi
 # This guarantees that proxy operations never compete with the main game loop for CPU cycles!
 echo "🔒 Starting secure key sniffer proxy (silent mode on port $PROXY_PORT)..."
 if [ "$USE_TASKSET" = true ]; then
-    taskset -c 2,3 mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" > sniffer.log 2>&1 &
+    taskset -c 2,3 mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" --ignore-hosts "^(files|assets|images|pipeline)\.vrchat\.cloud|^(.+\.)?amplitude\.com|^(.+\.)?cloudfront\.net" > sniffer.log 2>&1 &
 else
-    mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" > sniffer.log 2>&1 &
+    mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --allow-hosts "api\.vrchat\.cloud" --ignore-hosts "^(files|assets|images|pipeline)\.vrchat\.cloud|^(.+\.)?amplitude\.com|^(.+\.)?cloudfront\.net" > sniffer.log 2>&1 &
 fi
 PROXY_PID=$!
 
