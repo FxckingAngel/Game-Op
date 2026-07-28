@@ -43,18 +43,28 @@ if command -v lsof &> /dev/null; then
     lsof -t -i :$PROXY_PORT | xargs kill -9 > /dev/null 2>&1 || true
 fi
 
-# 2. Clean up any leftover background proxies, Steam, and hung game/crash handler processes
+# 2. Clean up any leftover background proxies, Steam, and hung game/crash handler processes gracefully
 pkill -f mitmdump || true
 pkill -f mitmproxy || true
-echo "🧹 Cleanly terminating any running/hung Steam, VRChat, or Crash Handler processes..."
-pkill -9 -f steam || true
-pkill -9 -f steamwebhelper || true
+echo "🧹 Safely shutting down Steam, VRChat, or Crash Handler background processes..."
+# Gracefully shutdown Steam first to prevent core dumps and stale locks
+steam -shutdown > /dev/null 2>&1 || true
 pkill -f VRChat || true
 pkill -f UnityCrashHandler64 || true
 pkill -f start_protected_game || true
-sleep 1.0
+sleep 1.5
 
-# 3. Dynamically locate VRChat's Proton Wine prefix path and cleanse any legacy persistent global Wine proxy settings
+# If any still remain, close them standardly (no -9 force-kill to avoid DrKonqi crashes)
+pkill -f steamwebhelper || true
+pkill -f steam || true
+
+# 3. Cleanse any stale Steam lock files to prevent startup freezes and client blockages
+echo "🧹 Cleansing stale Steam lock files..."
+rm -f "$HOME/.steam/steam.pid" > /dev/null 2>&1 || true
+rm -f "$HOME/.steam/steam/steam.pid" > /dev/null 2>&1 || true
+rm -f "$HOME/.local/share/Steam/steam.pid" > /dev/null 2>&1 || true
+
+# 4. Dynamically locate VRChat's Proton Wine prefix path and cleanse any legacy persistent global Wine proxy settings
 # This ensures that standard HTTP/HTTPS CDN and image loaders bypass the proxy and run at native gigabit speed!
 WINEPREFIX_CANDIDATES=(
     "$HOME/.steam/steam/steamapps/compatdata/438100/pfx"
