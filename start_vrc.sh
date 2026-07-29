@@ -194,6 +194,20 @@ if os.path.exists(local_low):
                             shutil.move(src, dest)
                 shutil.rmtree(legacy_path)
 
+        # Consolidate and merge Cache-WindowsPlayer-optimized (with dash) if it exists
+        dash_legacy = os.path.join(vrc_dir, 'Cache-WindowsPlayer-optimized')
+        if os.path.exists(dash_legacy) and os.path.isdir(dash_legacy):
+            print(f'  📦 Consolidating files from legacy folder: {dash_legacy}...')
+            for root, dirs, files in os.walk(dash_legacy):
+                for file in files:
+                    src = os.path.join(root, file)
+                    rel = os.path.relpath(src, dash_legacy)
+                    dest = os.path.join(cache_path, rel)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    if not os.path.exists(dest):
+                        shutil.move(src, dest)
+            shutil.rmtree(dash_legacy)
+
     # Self-heal and recreate healthy system directories
     for sub in ['Unity', 'VRChat', 'Unity/Temp', 'VRChat/VRChat']:
         path = os.path.join(local_low, sub)
@@ -404,14 +418,33 @@ echo "⚡ Starting Game-Op OS booster & process priority tracker..."
 
 echo "✅ VRChat has closed!"
 
-# 9. Run the in-place asset bundle optimizer (now runs in parallel ProcessPool!)
+# 9. Run the comprehensive in-place asset bundle, texture, and mesh optimizations on exit
 echo ""
 echo "=================================================================="
-echo " ⚙️ Deep Bundle Optimization Sweep..."
+echo " ⚙️ Deep Bundle & Texture Optimization Sweep..."
 echo "=================================================================="
 CACHE_PATH="$HOME/.steam/steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat/Cache-WindowsPlayer"
+HTTP_CACHE_PATH="$(dirname "$CACHE_PATH")/HTTPCache-WindowsPlayer"
+TEXTURE_CACHE_PATH="$(dirname "$CACHE_PATH")/TextureDiskCache-WindowsPlayer"
 
+# 1. Optimize raw Unity asset bundles in-place
 python3 bundle_optimizer.py "$CACHE_PATH" "$CACHE_PATH" 1024
+
+# 2. Optimize meshes and textures in-place inside Cache-WindowsPlayer
+echo "  Optimizing meshes and textures in-place inside Cache-WindowsPlayer..."
+./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$CACHE_PATH" --asset-output "$CACHE_PATH" --verbose --once
+
+# 3. Optimize extensionless web textures in-place inside HTTPCache-WindowsPlayer
+if [ -d "$HTTP_CACHE_PATH" ]; then
+    echo "  Optimizing extensionless textures in-place inside HTTPCache-WindowsPlayer..."
+    ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$HTTP_CACHE_PATH" --asset-output "$HTTP_CACHE_PATH" --verbose --once
+fi
+
+# 4. Optimize extensionless GPU textures in-place inside TextureDiskCache-WindowsPlayer
+if [ -d "$TEXTURE_CACHE_PATH" ]; then
+    echo "  Optimizing extensionless textures in-place inside TextureDiskCache-WindowsPlayer..."
+    ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$TEXTURE_CACHE_PATH" --asset-output "$TEXTURE_CACHE_PATH" --verbose --once
+fi
 
 echo "=================================================================="
 echo " 🎉 Optimization Sweep Completed! Ready for your next session."

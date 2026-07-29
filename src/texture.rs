@@ -154,7 +154,10 @@ impl TextureReducer {
         if output_is_fresh(input, output) && input != output {
             return Ok(false);
         }
-        let image = image::open(input).map_err(image_error)?;
+        let reader = image::ImageReader::open(input)?
+            .with_guessed_format()?;
+        let format = reader.format().unwrap_or(image::ImageFormat::Png);
+        let image = reader.decode().map_err(image_error)?;
         let (width, height) = image.dimensions();
         let max_size = max_size_for_texture(
             input,
@@ -207,7 +210,7 @@ impl TextureReducer {
 
         if needs_resize {
             let resized = resize_preserving_aspect(image, max_size);
-            save_image(&resized, output)?;
+            save_image_with_format(&resized, output, format)?;
             Ok(true)
         } else {
             if input != output {
@@ -283,25 +286,41 @@ fn resize_preserving_aspect(image: DynamicImage, max_side: u32) -> DynamicImage 
     image.resize(next_width, next_height, FilterType::Lanczos3)
 }
 
-fn save_image(image: &DynamicImage, output: &Path) -> io::Result<()> {
-    let format = output
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .and_then(ImageFormat::from_extension)
-        .unwrap_or(ImageFormat::Png);
+fn save_image_with_format(image: &DynamicImage, output: &Path, format: ImageFormat) -> io::Result<()> {
     image.save_with_format(output, format).map_err(image_error)
 }
 
 fn is_texture_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| {
-            matches!(
-                extension.to_ascii_lowercase().as_str(),
-                "png" | "jpg" | "jpeg" | "webp"
-            )
-        })
-        .unwrap_or(false)
+    // 1. Check extension first (fast path)
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        if matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "png" | "jpg" | "jpeg" | "webp"
+        ) {
+            return true;
+        }
+    }
+
+    // 2. Fallback to magic bytes signature analysis for extensionless cached files!
+    if let Ok(mut file) = fs::File::open(path) {
+        let mut buffer = [0u8; 12];
+        use std::io::Read;
+        if file.read_exact(&mut buffer).is_ok() {
+            // Check PNG magic signature: \x89PNG\r\n\x1a\n
+            if buffer[0..4] == [0x89, 0x50, 0x4E, 0x47] {
+                return true;
+            }
+            // Check JPEG magic signature: \xFF\xD8\xFF
+            if buffer[0..3] == [0xFF, 0xD8, 0xFF] {
+                return true;
+            }
+            // Check WEBP magic signature: RIFF....WEBP
+            if &buffer[0..4] == b"RIFF" && &buffer[8..12] == b"WEBP" {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn output_is_fresh(input: &Path, output: &Path) -> bool {
