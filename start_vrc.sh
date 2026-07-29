@@ -256,6 +256,40 @@ fi
 if [ -f "$HOME/.mitmproxy/mitmproxy-ca-cert.pem" ]; then
     cp "$HOME/.mitmproxy/mitmproxy-ca-cert.pem" "$DIR/mitmproxy-ca-cert.pem"
     echo "✅ Certificate copied to non-hidden path: $DIR/mitmproxy-ca-cert.pem"
+
+    # Install the mitmproxy Root CA into the Proton Wine prefix's Windows Root Certificate Store
+    # This ensures VRChat's Windows-native HTTP APIs (System.Net / wininet) trust our proxy completely!
+    STEAM_COMMON_CANDIDATES=(
+        "$(dirname "$(dirname "$WINEPREFIX_PATH")")/common"
+        "$HOME/.steam/steam/steamapps/common"
+        "$HOME/.local/share/Steam/steamapps/common"
+        "$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common"
+    )
+
+    PROTON_WINE=""
+    for d_cand in "${STEAM_COMMON_CANDIDATES[@]}"; do
+        if [ -d "$d_cand" ]; then
+            FOUND=$(find "$d_cand" -maxdepth 4 -name "wine64" -print -quit 2>/dev/null)
+            if [ -n "$FOUND" ]; then
+                PROTON_WINE="$FOUND"
+                break
+            fi
+        fi
+    done
+
+    if [ -n "$PROTON_WINE" ] && [ -d "$WINEPREFIX_PATH" ]; then
+        echo "🔒 [Cert Store] Proton wine64 detected at: $PROTON_WINE"
+        echo "🔒 [Cert Store] Installing mitmproxy Root CA into Proton Windows Root Certificate Store..."
+        WINEPREFIX="$WINEPREFIX_PATH" "$PROTON_WINE" certutil -addstore Root "$DIR/mitmproxy-ca-cert.pem" > /dev/null 2>&1 || true
+        echo "✅ Root CA successfully registered inside the Windows prefix!"
+    else
+        # Fallback to host wine if available
+        if command -v wine64 &> /dev/null && [ -d "$WINEPREFIX_PATH" ]; then
+            echo "🔒 [Cert Store] Host wine64 detected. Registering Root CA..."
+            WINEPREFIX="$WINEPREFIX_PATH" wine64 certutil -addstore Root "$DIR/mitmproxy-ca-cert.pem" > /dev/null 2>&1 || true
+            echo "✅ Root CA registered via host wine64!"
+        fi
+    fi
 else
     echo "⚠️ Warning: mitmproxy certificate not found at $HOME/.mitmproxy/mitmproxy-ca-cert.pem"
 fi
