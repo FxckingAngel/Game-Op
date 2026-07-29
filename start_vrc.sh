@@ -26,7 +26,7 @@ for p_cand in "${WINEPREFIX_CANDIDATES[@]}"; do
     fi
 done
 
-# Prepend ~/.local/bin to PATH to ensure user-installed mitmdump is found
+# Prepend ~/.local/bin to PATH to ensure user-installed binaries are found
 export PATH="$HOME/.local/bin:$PATH"
 
 # Bypass certificate pinning and SSL verification inside Unity's Mono/Proton framework
@@ -70,11 +70,9 @@ echo "=================================================================="
 echo " 🚀 Starting Game-Op Ultimate VRChat Session..."
 echo "=================================================================="
 
-# Check if mitmdump is available
+# Check if mitmdump is available (optional debug tool)
 if ! command -v mitmdump &> /dev/null; then
-    echo "Error: mitmdump is not in your PATH."
-    echo "Please ensure it is installed by running: pip install mitmproxy --break-system-packages"
-    exit 1
+    echo "💡 Note: mitmdump is not in your PATH. Debug proxy mode is unavailable (not required for native gameplay optimization)."
 fi
 
 # 1. Force kill any process holding port 8080 to guarantee it is free
@@ -141,13 +139,6 @@ if os.path.exists(reg_path):
     with open(reg_path, 'w', encoding='utf-8') as f:
         f.writelines(final_lines)
     print('✅ Proton registry user.reg cleansed of legacy proxies successfully!')
-    # Print current state for debugging verification
-    with open(reg_path, 'r', encoding='utf-8', errors='ignore') as f:
-        verified = f.read()
-    match = re.search(r'\[Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Internet Settings\].*?(?=\n\[|$)', verified, re.DOTALL)
-    if match:
-        print('🔍 Current Wine Internet Settings Registry State:')
-        print(match.group(0).strip())
 "
 
     # Self-healing fix for Unity Cache Temp directory creation errors
@@ -231,56 +222,36 @@ if os.path.exists(local_low):
 "
 fi
 
-# 4. Automatically copy the mitmproxy certificate to a non-hidden path
-# This bypasses the Proton container sandbox/pressure-vessel block on hidden dotfiles
-echo "🔒 Preparing certificate for the Proton sandbox..."
-mkdir -p "$HOME/.mitmproxy"
-if [ ! -f "$HOME/.mitmproxy/mitmproxy-ca-cert.pem" ]; then
-    echo "🔑 Generating local security certificates..."
-    mitmdump --version > /dev/null 2>&1 || true
-    # Run a quick mitmdump instance to ensure cert files are fully written
-    mitmdump & sleep 1; kill $! > /dev/null 2>&1 || true
-fi
-if [ -f "$HOME/.mitmproxy/mitmproxy-ca-cert.pem" ]; then
-    cp "$HOME/.mitmproxy/mitmproxy-ca-cert.pem" "$DIR/mitmproxy-ca-cert.pem"
-    echo "✅ Certificate copied to non-hidden path: $DIR/mitmproxy-ca-cert.pem"
-else
-    echo "⚠️ Warning: mitmproxy certificate not found at $HOME/.mitmproxy/mitmproxy-ca-cert.pem"
-fi
-
 # Ensure any legacy cache redirection symlinks are reverted to a normal folder to prevent game crashes
 if [ -f "./target/release/game-op" ]; then
     echo "🧹 Restoring cache folder to native state to prevent Unity crashes..."
     ./target/release/game-op --revert-cache > /dev/null 2>&1 || true
 fi
 
-# 5. Start the headless proxy sniffer in the background with selective host bypass
-# We ignore high-overhead CDNs, analytics, and Epic Online Services (EOS) at the TCP level to guarantee native speeds and connection stability!
-echo "🔒 Starting secure key sniffer proxy (silent mode on port $PROXY_PORT)..."
-mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --ignore-hosts "^(files|assets|images|pipeline)\.vrchat\.cloud|^(.+\.)?amplitude\.com|^(.+\.)?cloudfront\.net|^(.+\.)?epicgames\.com|^(.+\.)?epicgames\.dev" > sniffer.log 2>&1 &
-PROXY_PID=$!
-
-# Pin the background proxy strictly to logical CPU Core 1
-# This prevents the proxy thread from context-switching onto Core 0 where VRChat's critical rendering loop runs!
-# No root privileges are required to change CPU affinity for our own processes.
-if command -v taskset &> /dev/null; then
-    echo "⚡ [Scheduler] Isolating background proxy thread to logical CPU Core 1..."
-    taskset -p -c 1 $PROXY_PID > /dev/null 2>&1 || true
-fi
-
-# Start a background live bundle optimizer loop
-# It utilizes Linux kernel 'inotify' interrupts to detect completed downloads instantly,
-# optimizing assets in-place in microseconds before VRChat's renderer loads them!
+# ==================================================================
+# REAL-TIME LIVE IN-PLACE OPTIMIZER SCHEDULER
+# ==================================================================
 CACHE_PATH="$HOME/.steam/steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat/Cache-WindowsPlayer"
+HTTP_CACHE_PATH="$(dirname "$CACHE_PATH")/HTTPCache-WindowsPlayer"
+TEXTURE_CACHE_PATH="$(dirname "$CACHE_PATH")/TextureDiskCache-WindowsPlayer"
+
+# Guarantee all cache directories exist so monitoring watches do not fail
+mkdir -p "$CACHE_PATH" "$HTTP_CACHE_PATH" "$TEXTURE_CACHE_PATH"
 
 if command -v inotifywait &> /dev/null; then
-    echo "⚡ [Kernel Link] Linux inotifywait detected! Enabling instant real-time asset optimization..."
+    echo "⚡ [Kernel Link] Linux inotifywait detected! Enabling instant real-time live asset optimization..."
     (
-        # Monitor the cache folder recursively for closed-after-write events on __data files
-        inotifywait -m -r -e close_write --format "%w%f" "$CACHE_PATH" 2>/dev/null | while read -r filepath; do
+        # Monitor the cache folder, HTTP cache, and Texture cache recursively for closed-after-write events
+        inotifywait -m -r -e close_write --format "%w%f" "$CACHE_PATH" "$HTTP_CACHE_PATH" "$TEXTURE_CACHE_PATH" 2>/dev/null | while read -r filepath; do
             if [[ "$filepath" == *"__data" ]]; then
-                # Instantly transcode the completed bundle in-place before the game loads it!
+                # Instantly transcode the completed encrypted bundle in-place before the game loads it!
                 python3 bundle_optimizer.py "$filepath" "$filepath" 1024 >/dev/null 2>&1 || true
+            elif [[ "$filepath" == *"/HTTPCache-WindowsPlayer/"* ]]; then
+                # Instantly transcode downloaded extensionless HTTP raw web texture in-place
+                ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$HTTP_CACHE_PATH" --asset-output "$HTTP_CACHE_PATH" --once >/dev/null 2>&1 || true
+            elif [[ "$filepath" == *"/TextureDiskCache-WindowsPlayer/"* ]]; then
+                # Instantly transcode downloaded extensionless GPU disk texture in-place
+                ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$TEXTURE_CACHE_PATH" --asset-output "$TEXTURE_CACHE_PATH" --once >/dev/null 2>&1 || true
             fi
         done
     ) &
@@ -289,17 +260,26 @@ else
     echo "💡 Notice: Install 'inotify-tools' (sudo apt install inotify-tools) to enable instant kernel-level real-time asset optimization!"
     echo "🔄 Falling back to high-performance 15-second periodic live sweeper..."
     (
-        while kill -0 $PROXY_PID 2>/dev/null; do
+        while true; do
             sleep 15
+            # 1. Live-optimize Unity asset bundles inside Cache-WindowsPlayer
             if [ -d "$CACHE_PATH" ]; then
                 python3 bundle_optimizer.py "$CACHE_PATH" "$CACHE_PATH" 1024 >/dev/null 2>&1 || true
+            fi
+            # 2. Live-optimize unencrypted HTTP textures inside HTTPCache-WindowsPlayer
+            if [ -d "$HTTP_CACHE_PATH" ]; then
+                ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$HTTP_CACHE_PATH" --asset-output "$HTTP_CACHE_PATH" --once >/dev/null 2>&1 || true
+            fi
+            # 3. Live-optimize unencrypted GPU textures inside TextureDiskCache-WindowsPlayer
+            if [ -d "$TEXTURE_CACHE_PATH" ]; then
+                ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$TEXTURE_CACHE_PATH" --asset-output "$TEXTURE_CACHE_PATH" --once >/dev/null 2>&1 || true
             fi
         done
     ) &
     LIVE_OPT_PID=$!
 fi
 
-# Ensure the proxy turns off cleanly when this script exits/interrupts
+# Ensure the background tasks turn off cleanly when this script exits/interrupts
 cleanup() {
     echo ""
     echo "=================================================================="
@@ -309,31 +289,19 @@ cleanup() {
         echo "Stopping background live bundle optimizer (PID $LIVE_OPT_PID)..."
         kill "$LIVE_OPT_PID" > /dev/null 2>&1 || true
     fi
-    if [ -n "$PROXY_PID" ]; then
-        echo "Stopping secure sniffer proxy (PID $PROXY_PID)..."
-        kill "$PROXY_PID" > /dev/null 2>&1 || true
-    fi
 }
 trap cleanup EXIT
 
 sleep 1.0
 
-# 6. Debugging Print of any existing host system proxy environment variables
-echo "🔍 Checking active terminal environment proxy variables..."
-echo "  http_proxy:  $http_proxy"
-echo "  https_proxy: $https_proxy"
-echo "  all_proxy:   $all_proxy"
-echo "  no_proxy:    $no_proxy"
-echo ""
-
-# 7. Launch Steam / VRChat safely (prevents deadlocks and avoids restarting Steam if already running)
+# 5. Launch Steam / VRChat safely (prevents deadlocks and avoids restarting Steam if already running)
 if pgrep -x "steam" > /dev/null; then
     echo "🎮 Steam is already running! Sending launch command for VRChat..."
     steam steam://rungameid/438100 > /dev/null 2>&1 &
 else
     echo "🎮 Launching Steam..."
     echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exactly:"
-    echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud,epicgames.com,epicgames.dev DXVK_CONFIG_FILE=$DIR/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_GL_THREAD_CHANNEL=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%"
+    echo "   DXVK_CONFIG_FILE=$DIR/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_GL_THREAD_CHANNEL=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%"
     echo ""
 
     (
@@ -350,21 +318,18 @@ else
     )
 fi
 
-# 8. Launch the Rust thread booster (blocks until VRChat exits)
+# 6. Launch the Rust thread booster (blocks until VRChat exits)
 # We configure the booster to perform in-place optimizations directly inside VRChat's official folders!
 echo "⚡ Starting Game-Op OS booster & process priority tracker..."
 ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$CACHE_PATH" --asset-output "$CACHE_PATH" --verbose --once
 
 echo "✅ VRChat has closed!"
 
-# 9. Run the comprehensive in-place asset bundle, texture, and mesh optimizations on exit
+# 7. Run the comprehensive in-place asset bundle, texture, and mesh optimizations on exit
 echo ""
 echo "=================================================================="
 echo " ⚙️ Deep Bundle & Texture Optimization Sweep..."
 echo "=================================================================="
-CACHE_PATH="$HOME/.steam/steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat/Cache-WindowsPlayer"
-HTTP_CACHE_PATH="$(dirname "$CACHE_PATH")/HTTPCache-WindowsPlayer"
-TEXTURE_CACHE_PATH="$(dirname "$CACHE_PATH")/TextureDiskCache-WindowsPlayer"
 
 # 1. Optimize raw Unity asset bundles in-place
 python3 bundle_optimizer.py "$CACHE_PATH" "$CACHE_PATH" 1024
@@ -382,7 +347,7 @@ fi
 # 4. Optimize extensionless GPU textures in-place inside TextureDiskCache-WindowsPlayer
 if [ -d "$TEXTURE_CACHE_PATH" ]; then
     echo "  Optimizing extensionless textures in-place inside TextureDiskCache-WindowsPlayer..."
-    ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$TEXTURE_CACHE_PATH" --asset-output "$TEXTURE_CACHE_PATH" --verbose --once
+    ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$TEXTURE_CACHE_PATH" --asset-output "$TEXTURE_CACHE_PATH" --once
 fi
 
 echo "=================================================================="
