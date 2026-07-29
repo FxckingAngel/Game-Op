@@ -51,17 +51,6 @@ export MESA_NO_ERROR=1
 
 # 5. Optimize Intel-specific driver math calculations (prefers performance over double-precision trig)
 export INTEL_PRECISE_TRIG=0
-export DXVK_FRAME_PACE=low-latency
-
-# 5. Enable Mesa Multi-threaded OpenGL/Vulkan pipeline optimizations
-export mesa_glthread=true
-export MESA_GL_THREAD_CHANNEL=true
-
-# 6. Disable driver-level error checking inside Mesa to reclaim valuable CPU clock cycles
-export MESA_NO_ERROR=1
-
-# 7. Optimize Intel-specific driver math calculations
-export INTEL_PRECISE_TRIG=0
 
 # Ensure secure black-box binaries are compiled locally
 if [ -f "asset_key_resolver_bin.py" ] || [ -f "bundle_optimizer_bin.py" ]; then
