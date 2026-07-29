@@ -255,9 +255,9 @@ if [ -f "./target/release/game-op" ]; then
 fi
 
 # 5. Start the headless proxy sniffer in the background with selective host bypass
-# We ignore high-overhead CDNs and analytics at the TCP level to guarantee native loading speeds!
+# We ignore high-overhead CDNs, analytics, and Epic Online Services (EOS) at the TCP level to guarantee native speeds and connection stability!
 echo "🔒 Starting secure key sniffer proxy (silent mode on port $PROXY_PORT)..."
-mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --ignore-hosts "^(files|assets|images|pipeline)\.vrchat\.cloud|^(.+\.)?amplitude\.com|^(.+\.)?cloudfront\.net" > sniffer.log 2>&1 &
+mitmdump -s asset_key_resolver.py --listen-port $PROXY_PORT --ignore-hosts "^(files|assets|images|pipeline)\.vrchat\.cloud|^(.+\.)?amplitude\.com|^(.+\.)?cloudfront\.net|^(.+\.)?epicgames\.com|^(.+\.)?epicgames\.dev" > sniffer.log 2>&1 &
 PROXY_PID=$!
 
 # Pin the background proxy strictly to logical CPU Core 1
@@ -333,7 +333,7 @@ if pgrep -x "steam" > /dev/null; then
 else
     echo "🎮 Launching Steam..."
     echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exactly:"
-    echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud DXVK_CONFIG_FILE=$DIR/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_GL_THREAD_CHANNEL=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%"
+    echo "   SSL_CERT_FILE=$DIR/mitmproxy-ca-cert.pem http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud,epicgames.com,epicgames.dev DXVK_CONFIG_FILE=$DIR/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_GL_THREAD_CHANNEL=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%"
     echo ""
 
     (
