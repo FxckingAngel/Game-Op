@@ -12,6 +12,20 @@ cd "$DIR"
 # This completely prevents Python 3.14 import errors and AttributeErrors!
 rm -f "$DIR"/*.so "$DIR"/*.c > /dev/null 2>&1 || true
 
+# Dynamically locate VRChat's Proton Wine prefix path globally on startup
+WINEPREFIX_CANDIDATES=(
+    "$HOME/.steam/steam/steamapps/compatdata/438100/pfx"
+    "$HOME/.local/share/Steam/steamapps/compatdata/438100/pfx"
+    "$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/compatdata/438100/pfx"
+)
+WINEPREFIX_PATH=""
+for p_cand in "${WINEPREFIX_CANDIDATES[@]}"; do
+    if [ -d "$p_cand" ]; then
+        WINEPREFIX_PATH="$p_cand"
+        break
+    fi
+done
+
 # Prepend ~/.local/bin to PATH to ensure user-installed mitmdump is found
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -102,21 +116,8 @@ if ! pgrep -x "steam" > /dev/null; then
     rm -f "$HOME/.local/share/Steam/steam.pid" > /dev/null 2>&1 || true
 fi
 
-# 4. Dynamically locate VRChat's Proton Wine prefix path and cleanse any legacy persistent global Wine proxy settings
+# 4. Cleanse any legacy persistent global Wine proxy settings
 # This ensures that standard HTTP/HTTPS CDN and image loaders bypass the proxy and run at native gigabit speed!
-WINEPREFIX_CANDIDATES=(
-    "$HOME/.steam/steam/steamapps/compatdata/438100/pfx"
-    "$HOME/.local/share/Steam/steamapps/compatdata/438100/pfx"
-    "$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/compatdata/438100/pfx"
-)
-WINEPREFIX_PATH=""
-for p in "${WINEPREFIX_CANDIDATES[@]}"; do
-    if [ -d "$p" ]; then
-        WINEPREFIX_PATH="$p"
-        break
-    fi
-done
-
 if [ -n "$WINEPREFIX_PATH" ]; then
     export WINEPREFIX="$WINEPREFIX_PATH"
     echo "🌐 Cleansing legacy global Wine proxy registries directly in user.reg..."
