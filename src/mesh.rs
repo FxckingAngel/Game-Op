@@ -51,7 +51,12 @@ impl MeshReducer {
         let mut report = MeshReport::default();
         let mut tasks = Vec::new();
 
-        self.walk_and_collect(&input_root, &input_root, &output_root, &mut report, &mut tasks)?;
+        if input_root.is_file() {
+            report.scanned += 1;
+            tasks.push((input_root.clone(), output_root.clone()));
+        } else {
+            self.walk_and_collect(&input_root, &input_root, &output_root, &mut report, &mut tasks)?;
+        }
 
         if !tasks.is_empty() {
             use std::sync::{Arc, Mutex};
