@@ -94,6 +94,82 @@ pub fn parse_gpu_names(output: &str) -> Vec<GpuInfo> {
         .collect()
 }
 
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone)]
+pub struct IntelGpuState {
+    pub card_path: PathBuf,
+    pub original_min: u32,
+    pub original_max: u32,
+}
+
+pub fn find_intel_gpu_card() -> Option<PathBuf> {
+    let drm_dir = Path::new("/sys/class/drm");
+    if !drm_dir.exists() {
+        return None;
+    }
+    if let Ok(entries) = fs::read_dir(drm_dir) {
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name.starts_with("card") && !name.contains('-') {
+                if path.join("gt_RP0_freq_mhz").exists() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    let fallback = PathBuf::from("/sys/class/drm/card0");
+    if fallback.join("gt_RP0_freq_mhz").exists() {
+        Some(fallback)
+    } else {
+        None
+    }
+}
+
+pub fn pin_intel_gpu() -> Option<IntelGpuState> {
+    let card_path = find_intel_gpu_card()?;
+    
+    let rp0_path = card_path.join("gt_RP0_freq_mhz");
+    let min_path = card_path.join("gt_min_freq_mhz");
+    let max_path = card_path.join("gt_max_freq_mhz");
+    
+    let rp0_val: u32 = fs::read_to_string(&rp0_path).ok()?.trim().parse().ok()?;
+    let orig_min: u32 = fs::read_to_string(&min_path).ok()?.trim().parse().ok()?;
+    let orig_max: u32 = fs::read_to_string(&max_path).ok()?.trim().parse().ok()?;
+    
+    println!("🚀 [GPU Optimizer] Intel iGPU hardware limit detected (RP0 = {} MHz). Original range: {}-{} MHz.", rp0_val, orig_min, orig_max);
+    
+    if let Err(e) = fs::write(&min_path, rp0_val.to_string()) {
+        println!("⚠️  [GPU Optimizer] Failed to write to {}: {}. Root permissions or CAP_SYS_ADMIN may be required.", min_path.display(), e);
+        return None;
+    }
+    if let Err(e) = fs::write(&max_path, rp0_val.to_string()) {
+        println!("⚠️  [GPU Optimizer] Failed to write to {}: {}. Root permissions or CAP_SYS_ADMIN may be required.", max_path.display(), e);
+        let _ = fs::write(&min_path, orig_min.to_string());
+        return None;
+    }
+    
+    println!("✅ [GPU Optimizer] Successfully pinned Intel iGPU clock speed at its absolute hardware maximum: {} MHz.", rp0_val);
+    
+    Some(IntelGpuState {
+        card_path,
+        original_min: orig_min,
+        original_max: orig_max,
+    })
+}
+
+pub fn restore_intel_gpu(state: &IntelGpuState) -> io::Result<()> {
+    let min_path = state.card_path.join("gt_min_freq_mhz");
+    let max_path = state.card_path.join("gt_max_freq_mhz");
+    
+    fs::write(&min_path, state.original_min.to_string())?;
+    fs::write(&max_path, state.original_max.to_string())?;
+    println!("🔄 [GPU Optimizer] Restored Intel iGPU frequency range to original defaults: {}-{} MHz.", state.original_min, state.original_max);
+    Ok(())
+}
+
 fn run(command: &str, args: &[&str]) -> io::Result<String> {
     let output = Command::new(command).args(args).output()?;
     Ok(String::from_utf8_lossy(&output.stdout).to_string())

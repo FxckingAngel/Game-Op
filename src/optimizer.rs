@@ -14,6 +14,7 @@ pub struct SessionConfig {
 pub struct Optimizer {
     config: SessionConfig,
     revert_commands: Vec<CommandSpec>,
+    intel_gpu_state: Option<gpu::IntelGpuState>,
 }
 
 #[derive(Clone)]
@@ -27,6 +28,7 @@ impl Optimizer {
         Self {
             config,
             revert_commands: Vec::new(),
+            intel_gpu_state: None,
         }
     }
 
@@ -50,6 +52,12 @@ impl Optimizer {
         while let Some(command) = self.revert_commands.pop() {
             self.run(command)?;
         }
+        if let Some(ref state) = self.intel_gpu_state {
+            if let Err(e) = gpu::restore_intel_gpu(state) {
+                println!("⚠️  [GPU Optimizer] Failed to restore Intel iGPU frequency limits: {}", e);
+            }
+        }
+        self.intel_gpu_state = None;
         Ok(())
     }
 
@@ -108,13 +116,18 @@ impl Optimizer {
         Ok(())
     }
 
-    fn apply_gpu_profile(&self) -> io::Result<()> {
+    fn apply_gpu_profile(&mut self) -> io::Result<()> {
         let gpus = gpu::detect_gpus().unwrap_or_default();
         println!(
             "GPU profile step for {}: {}",
             self.config.target_process,
             gpu::recommendation_for(&gpus)
         );
+        if gpus.iter().any(|gpu| gpu.vendor == gpu::GpuVendor::Intel) {
+            if let Some(state) = gpu::pin_intel_gpu() {
+                self.intel_gpu_state = Some(state);
+            }
+        }
         Ok(())
     }
 
