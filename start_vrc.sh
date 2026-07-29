@@ -8,9 +8,9 @@ set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"
 
-# Clean up any legacy, conflicting Cython .so or .c binaries, as well as stale compiled python bytecode
-# This completely prevents Python magic number conflicts and AttributeErrors!
-rm -f "$DIR"/*.so "$DIR"/*.c "$DIR"/*_bin.pyc > /dev/null 2>&1 || true
+# Clean up any legacy, conflicting Cython .so or .c binaries, as well as stale compiled python bytecode and untracked bin files
+# This completely prevents Python magic number conflicts, local file collisions, and AttributeErrors!
+rm -f "$DIR"/*.so "$DIR"/*.c "$DIR"/*_bin.pyc "$DIR"/*_bin.py > /dev/null 2>&1 || true
 rm -rf "$DIR"/__pycache__ > /dev/null 2>&1 || true
 
 # Dynamically locate VRChat's Proton Wine prefix path globally on startup
@@ -60,14 +60,6 @@ export MESA_NO_ERROR=1
 
 # 5. Optimize Intel-specific driver math calculations (prefers performance over double-precision trig)
 export INTEL_PRECISE_TRIG=0
-
-# Ensure secure black-box binaries are compiled locally
-if [ -f "asset_key_resolver_bin.py" ] || [ -f "bundle_optimizer_bin.py" ]; then
-    echo "🔒 Secure black-box python source detected."
-    echo "⚙️ Automatically compiling and locking native binaries for your hardware..."
-    chmod +x compile_binaries.sh
-    ./compile_binaries.sh
-fi
 
 # Ensure the high-performance Rust booster binary is compiled and up-to-date
 if command -v cargo &> /dev/null; then
