@@ -26,6 +26,14 @@ for p_cand in "${WINEPREFIX_CANDIDATES[@]}"; do
     fi
 done
 
+# Automatically create a handy shortcut to VRChat's AppData/LocalLow folder directly in Game-Op!
+if [ -n "$WINEPREFIX_PATH" ]; then
+    VRC_LOCAL_LOW="$WINEPREFIX_PATH/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat"
+    if [ -d "$VRC_LOCAL_LOW" ]; then
+        ln -sfn "$VRC_LOCAL_LOW" "$DIR/vrc-data"
+    fi
+fi
+
 # Prepend ~/.local/bin to PATH to ensure user-installed binaries are found
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -248,10 +256,10 @@ if command -v inotifywait &> /dev/null; then
                 python3 bundle_optimizer.py "$filepath" "$filepath" 1024 >/dev/null 2>&1 || true
             elif [[ "$filepath" == *"/HTTPCache-WindowsPlayer/"* ]]; then
                 # Instantly transcode downloaded extensionless HTTP raw web texture in-place
-                ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$HTTP_CACHE_PATH" --asset-output "$HTTP_CACHE_PATH" --once >/dev/null 2>&1 || true
+                ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$filepath" --asset-output "$filepath" --once >/dev/null 2>&1 || true
             elif [[ "$filepath" == *"/TextureDiskCache-WindowsPlayer/"* ]]; then
                 # Instantly transcode downloaded extensionless GPU disk texture in-place
-                ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$TEXTURE_CACHE_PATH" --asset-output "$TEXTURE_CACHE_PATH" --once >/dev/null 2>&1 || true
+                ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$filepath" --asset-output "$filepath" --once >/dev/null 2>&1 || true
             fi
         done
     ) &
