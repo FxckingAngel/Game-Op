@@ -398,8 +398,9 @@ else
 fi
 
 # 8. Launch the Rust thread booster (blocks until VRChat exits)
+# We configure the booster to perform in-place optimizations directly inside VRChat's official folders!
 echo "⚡ Starting Game-Op OS booster & process priority tracker..."
-./target/release/game-op --profile vrchat-hq-low-end --verbose --once
+./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$CACHE_PATH" --asset-output "$CACHE_PATH" --verbose --once
 
 echo "✅ VRChat has closed!"
 
