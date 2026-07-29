@@ -96,10 +96,20 @@ fi
 # 2. Clean up any leftover background proxies and hung game/crash handler processes gracefully
 pkill -f mitmdump || true
 pkill -f mitmproxy || true
-echo "🧹 Safely cleaning up VRChat and Crash Handler background processes..."
+echo "🧹 Safely cleaning up VRChat, Crash Handler, and Wine zombie processes..."
 pkill -f VRChat || true
 pkill -f UnityCrashHandler64 || true
 pkill -f start_protected_game || true
+pkill -f wineserver || true
+pkill -f explorer.exe || true
+pkill -f services.exe || true
+pkill -f winedevice.exe || true
+pkill -f plugplay.exe || true
+pkill -f svchost.exe || true
+pkill -f winedbg || true
+if command -v wineserver &> /dev/null; then
+    wineserver -k > /dev/null 2>&1 || true
+fi
 sleep 0.5
 
 # 3. Cleanse any stale Steam lock files ONLY if Steam is not currently running
