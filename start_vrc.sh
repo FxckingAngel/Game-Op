@@ -308,6 +308,10 @@ sleep 1.0
 # 5. Launch Steam / VRChat safely (prevents deadlocks and avoids restarting Steam if already running)
 if pgrep -x "steam" > /dev/null; then
     echo "🎮 Steam is already running! Sending launch command for VRChat..."
+    echo "⚠️  [Warning] Steam is running in the background."
+    echo "   To ensure keys are captured successfully, you MUST set VRChat's Steam Launch Options in the Steam GUI to:"
+    echo "   SSL_CERT_FILE=\"$DIR/mitmproxy-ca-cert.pem\" http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=\"files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud\" %command%"
+    echo ""
     steam steam://rungameid/438100 > /dev/null 2>&1 &
 else
     echo "🎮 Launching Steam..."
