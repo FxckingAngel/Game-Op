@@ -9,3 +9,7 @@ build/
 _setup_*_temp.py
 *_bin.py
 
+handoff.md
+goal.md
+checkoff.md
+AGENT_NOTES.md
