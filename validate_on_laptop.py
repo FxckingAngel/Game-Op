@@ -149,6 +149,10 @@ def main():
     ap.add_argument("--max-size", type=int, default=1024, help="Texture budget px (default 1024)")
     ap.add_argument("--generic", action="store_true",
                     help="Optimize as a generic Unity game (skip the VRChat key pipeline)")
+    ap.add_argument("--gpu-compress", action="store_true",
+                    help="Also re-encode textures into a compact GPU format (BC7/DXT1/ASTC)")
+    ap.add_argument("--gpu-format", default=None,
+                    help="Force a GPU format: bc7, dxt5, bc1, astc4x4/5x5/6x6/8x8")
     ap.add_argument("--report", default="game-op-validation-report.txt")
     ap.add_argument("--keep", action="store_true", help="Keep the temp workdir for inspection")
     args = ap.parse_args()
@@ -200,6 +204,10 @@ def main():
     cmd = [sys.executable, optimizer, src_copy, out_dir, str(args.max_size), "--min-size-mb", "0"]
     if args.generic:
         cmd.append("--generic")
+    if args.gpu_compress:
+        cmd.append("--gpu-compress")
+    if args.gpu_format:
+        cmd += ["--gpu-format", args.gpu_format]
     print(f"Running optimizer: {' '.join(cmd)}")
     t0 = time.time()
     proc = subprocess.run(cmd, capture_output=True, text=True)
