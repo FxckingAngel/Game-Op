@@ -94,7 +94,7 @@ def run_integration_test():
         
     # 6. Load and decrypt the database
     print("Decrypting secure key database...")
-    keys_db = load_encrypted_db(db_path, None)
+    keys_db = load_encrypted_db(db_path)
     
     print(f"Decrypted database contents: {keys_db}")
     

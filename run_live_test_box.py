@@ -206,7 +206,7 @@ def print_mathematical_limits_dashboard(cache_path, sweep_output):
     
     # 3. Security check
     db_path = os.path.expanduser("~/Game-Op/vrc_keys.db")
-    keys_db = load_encrypted_db(db_path, None)
+    keys_db = load_encrypted_db(db_path)
     db_secured = os.path.exists(db_path) and oct(os.stat(db_path).st_mode & 0o777) == "0o600"
     
     print(f"| OPTIMIZATION ASPECT    | BEFORE (RAW)    | AFTER (OPTIMIZED) | SAVED %     |")
