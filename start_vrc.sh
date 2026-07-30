@@ -303,6 +303,38 @@ else
     LIVE_OPT_PID=$!
 fi
 
+# ==================================================================
+# KEY-CAPTURE PROXY  (captures VRChat decryption keys from the API as
+# assets load, so bundle_optimizer can actually decrypt and optimize them)
+# ==================================================================
+KEYCAP_PID=""
+KEYCAP_ENABLED=0
+CERT_PATH="$DIR/mitmproxy-ca-cert.pem"
+if [ "${GAME_OP_KEYCAP:-1}" != "0" ]; then
+    if ! command -v mitmdump &> /dev/null; then
+        echo "💡 mitmproxy not installed - VRChat bundles cannot be decrypted."
+        echo "   Run ./setup_keycapture.sh once to enable key capture."
+    elif [ ! -f "$CERT_PATH" ]; then
+        echo "💡 Key-capture cert not found at $CERT_PATH."
+        echo "   Run ./setup_keycapture.sh once to generate it and get your launch options."
+    else
+        echo "🔑 Starting key-capture proxy on 127.0.0.1:8080 (api.vrchat.cloud only)..."
+        mitmdump -s "$DIR/asset_key_resolver.py" \
+            --listen-host 127.0.0.1 --listen-port 8080 \
+            --allow-hosts 'api\.vrchat\.cloud' \
+            > "$DIR/keycap.log" 2>&1 &
+        KEYCAP_PID=$!
+        sleep 1.5
+        if kill -0 "$KEYCAP_PID" 2>/dev/null; then
+            KEYCAP_ENABLED=1
+            echo "✅ Key-capture proxy running (PID $KEYCAP_PID). Log: $DIR/keycap.log"
+        else
+            echo "⚠️  Key-capture proxy failed to start. See $DIR/keycap.log"
+            KEYCAP_PID=""
+        fi
+    fi
+fi
+
 # Ensure the background tasks turn off cleanly when this script exits/interrupts
 cleanup() {
     echo ""
@@ -313,24 +345,31 @@ cleanup() {
         echo "Stopping background live bundle optimizer (PID $LIVE_OPT_PID)..."
         kill "$LIVE_OPT_PID" > /dev/null 2>&1 || true
     fi
+    if [ -n "$KEYCAP_PID" ]; then
+        echo "Stopping key-capture proxy (PID $KEYCAP_PID)..."
+        kill "$KEYCAP_PID" > /dev/null 2>&1 || true
+    fi
 }
 trap cleanup EXIT
 
 sleep 1.0
 
+# Build the exact Steam Launch Options string the user must set once.
+LAUNCH_OPTS="DXVK_CONFIG_FILE=$DIR/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_GL_THREAD_CHANNEL=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0"
+if [ "$KEYCAP_ENABLED" = "1" ]; then
+    # Route only VRChat's API through the proxy for key capture; CDNs stay direct.
+    LAUNCH_OPTS="SSL_CERT_FILE=\"$CERT_PATH\" MONO_TLS_ALLOW_UNTRUSTED=1 http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=\"files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud\" $LAUNCH_OPTS"
+fi
+echo "👉 IMPORTANT: set VRChat's Steam Launch Options (Steam > VRChat > Properties) to exactly:"
+echo "   $LAUNCH_OPTS %command%"
+echo ""
+
 # 5. Launch Steam / VRChat safely (prevents deadlocks and avoids restarting Steam if already running)
 if pgrep -x "steam" > /dev/null; then
     echo "🎮 Steam is already running! Sending launch command for VRChat..."
-    echo "⚠️  [Warning] Steam is running in the background."
-    echo "   To ensure keys are captured successfully, you MUST set VRChat's Steam Launch Options in the Steam GUI to:"
-    echo "   SSL_CERT_FILE=\"$DIR/mitmproxy-ca-cert.pem\" http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy=\"files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud\" %command%"
-    echo ""
     steam steam://rungameid/438100 > /dev/null 2>&1 &
 else
     echo "🎮 Launching Steam..."
-    echo "👉 NOTE: Please ensure your VRChat Steam Launch Options are set to exactly:"
-    echo "   DXVK_CONFIG_FILE=$DIR/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_GL_THREAD_CHANNEL=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%"
-    echo ""
 
     (
         # Unset all game-specific performance variables to guarantee Steam client stability and prevent Chromium/steamwebhelper crashes!

@@ -8,6 +8,10 @@ build/
 *.pyc
 _setup_*_temp.py
 *_bin.py
+vrc_keys.db
+.key_lock
+vrc-data
+game-op-validation-report.txt
 
 handoff.md
 goal.md

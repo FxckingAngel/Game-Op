@@ -53,6 +53,28 @@ actual absolute path to this folder:
 DXVK_CONFIG_FILE=/path/to/Game-Op/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%
 ```
 
+## Enabling VRChat decryption (required to optimize VRChat bundles)
+
+VRChat encrypts its cached bundles, so the optimizer cannot shrink them without
+the per-file decryption keys. Game-Op captures those keys from VRChat's own API
+as you load avatars and worlds, using a local proxy. Set it up once:
+
+```bash
+./setup_keycapture.sh
+```
+
+That installs mitmproxy if needed, generates a local certificate, and prints
+the exact Steam Launch Options to paste (they replace the ones above and add
+the proxy + certificate settings). After that, `./start_vrc.sh` starts the
+key-capture proxy automatically; keys are saved to `~/Game-Op/vrc_keys.db` and
+the optimizer decrypts and shrinks those bundles on the fly and on exit.
+
+Note: this routes only `api.vrchat.cloud` through a local proxy to read the
+keys your own client already receives; CDN/asset downloads stay direct. It
+touches VRChat's API traffic, not game memory - be aware of VRChat's Terms of
+Service when deciding to use it. To run without it (no VRChat decryption), set
+`GAME_OP_KEYCAP=0 ./start_vrc.sh`.
+
 ---
 
 ## What it does
