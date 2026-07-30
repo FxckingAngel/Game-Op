@@ -61,6 +61,19 @@ export MESA_NO_ERROR=1
 # 5. Optimize Intel-specific driver math calculations (prefers performance over double-precision trig)
 export INTEL_PRECISE_TRIG=0
 
+# Optional GPU texture-format compression (experimental). OFF by default; enable
+# with GAME_OP_GPU_COMPRESS=1 ./start_vrc.sh  (optionally GAME_OP_GPU_FORMAT=bc7).
+GPU_OPT_FLAGS=""
+case "${GAME_OP_GPU_COMPRESS:-}" in
+    1|true|yes|on)
+        GPU_OPT_FLAGS="--gpu-compress"
+        if [ -n "${GAME_OP_GPU_FORMAT:-}" ]; then
+            GPU_OPT_FLAGS="$GPU_OPT_FLAGS --gpu-format ${GAME_OP_GPU_FORMAT}"
+        fi
+        echo "🎨 GPU texture-format compression ENABLED (experimental): $GPU_OPT_FLAGS"
+        ;;
+esac
+
 # Ensure the high-performance Rust booster binary is compiled and up-to-date
 if command -v cargo &> /dev/null; then
     echo "⚙️ Verifying and compiling high-performance Rust booster..."
@@ -256,7 +269,7 @@ if command -v inotifywait &> /dev/null; then
         inotifywait -m -r -e close_write --format "%w%f" "$CACHE_PATH" "$HTTP_CACHE_PATH" "$TEXTURE_CACHE_PATH" 2>/dev/null | while read -r filepath; do
             if [[ "$filepath" == *"__data" ]]; then
                 # Instantly transcode the completed encrypted bundle in-place before the game loads it!
-                python3 bundle_optimizer.py "$filepath" "$filepath" 1024 >/dev/null 2>&1 || true
+                python3 bundle_optimizer.py "$filepath" "$filepath" 1024 $GPU_OPT_FLAGS >/dev/null 2>&1 || true
             elif [[ "$filepath" == *"/HTTPCache-WindowsPlayer/"* ]]; then
                 # Instantly transcode downloaded extensionless HTTP raw web texture in-place
                 ./target/release/game-op --profile vrchat-hq-low-end --asset-cache "$filepath" --asset-output "$filepath" --once >/dev/null 2>&1 || true
@@ -275,7 +288,7 @@ else
             sleep 15
             # 1. Live-optimize Unity asset bundles inside Cache-WindowsPlayer
             if [ -d "$CACHE_PATH" ]; then
-                python3 bundle_optimizer.py "$CACHE_PATH" "$CACHE_PATH" 1024 >/dev/null 2>&1 || true
+                python3 bundle_optimizer.py "$CACHE_PATH" "$CACHE_PATH" 1024 $GPU_OPT_FLAGS >/dev/null 2>&1 || true
             fi
             # 2. Live-optimize unencrypted HTTP textures inside HTTPCache-WindowsPlayer
             if [ -d "$HTTP_CACHE_PATH" ]; then
@@ -347,7 +360,7 @@ echo " ⚙️ Deep Bundle & Texture Optimization Sweep..."
 echo "=================================================================="
 
 # 1. Optimize raw Unity asset bundles in-place
-python3 bundle_optimizer.py "$CACHE_PATH" "$CACHE_PATH" 1024
+python3 bundle_optimizer.py "$CACHE_PATH" "$CACHE_PATH" 1024 $GPU_OPT_FLAGS
 
 # 2. Optimize meshes and textures in-place inside Cache-WindowsPlayer
 echo "  Optimizing meshes and textures in-place inside Cache-WindowsPlayer..."

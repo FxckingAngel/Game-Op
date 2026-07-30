@@ -1,124 +1,150 @@
 # Game-Op
 
-Game-Op is a lightweight, high-performance, and secure game session booster and local asset optimization suite. It is built specifically to address hardware and network-level bottlenecks when running VRChat-like virtual reality workloads on lower-end computers, laptops, and integrated graphics chips (like the Intel HD Graphics 620).
+Game-Op is a lightweight game-session optimizer for low-end PCs and laptops. It
+makes heavy 3D and VR titles run smoother on weak hardware (for example an Intel
+HD Graphics 620 iGPU) by combining OS-level performance tuning with in-place
+optimization of the game's own downloaded assets. The current focus is VRChat on
+Linux via Proton, but the asset optimizer works on any Unity game.
 
-By combining OS-level thread scheduler prioritizing and hardware frequency pinning with Class-Aware in-place asset optimization and a Secure Local Cryptographic Key Vault, Game-Op lets you achieve maximum visual detail with minimal VRAM footprint and absolute safety.
-
----
-
-## Table of Contents
-1. What is Game-Op?
-2. Key Architecture & Features
-   * OS Booster & Thread Priority Scheduler
-   * Secure Local Key Cryptographic Vault
-   * Real-Time Headless Asset Proxy resolver
-   * Class-Aware In-Place Asset Profiling
-3. Directory Structure Map
-4. Quick Start Guide (Steam Deck & Linux)
-   * Phase 1: Installation & Setup
-   * Phase 2: Launch & Play
-5. Cryptographic Safety & Compliance
-6. License
+It operates only on local files your client already downloaded and on OS
+scheduler and power settings. It does not read or modify game memory.
 
 ---
 
-## Key Features
+## Requirements
 
-### 1. OS Booster & Thread Priority Scheduler (Rust Engine)
-* Hardware Power Management: Overrides local CPU scaling governors to force high-performance frequencies, preventing laptops from thermal-throttling when heavy assets load.
-* CPU Thread Prioritization: Elevates VRChat's active process, rendering threads, and graphics queues to "High Priority" in your CPU scheduler.
-* Linux Process Watcher: Automatically handles Steam/Proton setup container runtimes (reaper, pressure-vessel), waits for the true game launch, filters out defunct/zombie processes, and reverts power settings on exit.
+- Linux (Ubuntu/Kubuntu/Steam Deck and similar). Windows/macOS support is
+  partial; see "Platform support" below.
+- Rust toolchain (`cargo`) - the launcher builds the booster for you.
+- Python 3.9+ with these packages:
 
-### 2. Secure Local Key Cryptographic Vault
-* Zero-Dependency Encryption: Uses a custom HMAC-SHA256 stream cipher (mathematically equivalent to AES-CTR/ChaCha20) written in pure, dependency-free Python.
-* System-Level Lock: Writes a random 256-bit Master Key to a hidden file (.key_lock) with UNIX file permissions restricted to 0600 (Owner Read/Write only).
-* Perfect Secrecy (Nonces): Dynamically generates a random 16-byte nonce for every saved key, ensuring encrypted hexadecimal ciphertexts look completely different and random on disk.
+  ```bash
+  pip install UnityPy Pillow cryptography
+  # optional, only for the key-capture proxy:
+  pip install mitmproxy pycryptodome
+  ```
 
-### 3. Real-Time Headless Asset Proxy Resolver
-* Selective Host Decryption (--allow-hosts): Decrypts only the essential metadata endpoints to resolve local cache decryption keys in the background, while completely bypassing assets and CDN servers. This prevents any TLS handshake errors or download alerts, running at 100% native gigabit speed.
-* Asynchronous Processing: Offloads payload decryption and key verification to a separate background thread, ensuring 0ms blocking latency on your network stream and completely eliminating in-game freezes.
+- `inotify-tools` for instant live optimization (optional; falls back to a
+  periodic sweep):
 
-### 4. Class-Aware In-Place Asset Profiling
-* Detail Textures (Face, Body, Eyes, Skin, Albedo, Normals): Allocated a 1.25x budget multiplier (e.g. 1280px for a 1024px budget) to keep faces and specular highlights crisp.
-* Performance Maps (Roughness, Metallic, Packed Masks, Occlusion): Scaled down aggressively to 512px or 256px with zero visible quality loss, freeing up over 70% of your shared VRAM.
-* Selective Lazy Sweeping: Automatically skips any cache files smaller than 30MB on exit, targeting only the massive, lag-inducing bundles and completing sweeps in less than 1-2 seconds.
-
----
-
-## Directory Structure Map
-```txt
-Game-Op/
-├── Cargo.toml            # Rust build configuration
-├── src/                  # Rust boost engine
-│   ├── main.rs           # Core session CLI & process tracker
-│   ├── process.rs        # Linux non-truncating process watcher
-│   ├── gpu.rs            # GPU topology & performance recommendations
-│   ├── optimizer.rs      # CPU prioritizer & frequency governors
-│   └── unity_bundle.rs   # Binary UnityFS bundle header parser
-├── asset_key_resolver.py # Obfuscated, secure background metadata key proxy
-├── bundle_optimizer.py   # Class-Aware, multi-threaded UnityFS bundle transcoder
-└── start_vrc.sh          # Unified 1-click launcher & session wrapper
-```
+  ```bash
+  sudo apt install inotify-tools
+  ```
 
 ---
 
-## Quick Start Guide (Steam Deck & Linux)
-
-### Phase 1: Installation & Setup
-Open your terminal inside Desktop Mode on your Linux/Steam Deck and run:
+## Quick start
 
 ```bash
-# 1. Clone this repository
 git clone https://github.com/FxckingAngel/Game-Op.git
 cd Game-Op
-
-# 2. Build the booster in Release Mode
-cargo build --release
-
-# 3. Install required Python packages securely
-pip install mitmproxy UnityPy Pillow --break-system-packages
-
-# 4. Generate local proxy certificates (starts & exits immediately)
-mitmdump --version
-
-# 5. Import the certificate into your Linux Host trusted store (Required for Proton containers!)
-# On Ubuntu/Debian:
-sudo cp ~/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy.crt
-sudo update-ca-certificates
-
-# On Steam Deck / Arch Linux:
-# sudo cp ~/.mitmproxy/mitmproxy-ca-cert.pem /etc/ca-certificates/trust-source/anchors/mitmproxy.crt
-# sudo trust extract-compat
-```
-
-*Note: To force only VRChat's API requests (using C#/Mono) to route through the proxy to capture keys, while allowing player status, WebSockets, avatars, and worlds CDNs to download natively at 100% full speed, set VRChat's **Steam Launch Options** to exactly:*
-```txt
-SSL_CERT_FILE="/home/koronet/Game-Op/mitmproxy-ca-cert.pem" http_proxy=http://127.0.0.1:8080 https_proxy=http://127.0.0.1:8080 no_proxy="files.vrchat.cloud,assets.vrchat.cloud,images.vrchat.cloud,pipeline.vrchat.cloud" %command%
-```
-*(Please replace `/home/koronet/Game-Op` with your actual, absolute Linux path to your Game-Op directory!)*
-
----
-
-### Phase 2: Launch & Play
-To start your optimized VRChat session, simply run your launcher script:
-
-```bash
 ./start_vrc.sh
 ```
 
-1. It silently spawns the secure background resolver.
-2. It cleanses legacy registries and self-heals your Unity temp directories.
-3. It launches VRChat via Steam and attaches the Rust thread booster.
-4. Play normally. As you explore, cache keys are securely resolved and saved.
-5. Close VRChat. The script will safely shut down the resolver and run a fast, lazy in-place compression pass on your newly cached models.
+That single command builds the Rust booster if needed, cleans up stale Proton
+state, launches VRChat through Steam, optimizes assets live as they download,
+and runs a final optimization sweep when you close the game.
+
+One-time setup: set VRChat's Steam Launch Options (Steam > VRChat > Properties)
+so the game picks up the performance environment. Replace the path with your
+actual absolute path to this folder:
+
+```txt
+DXVK_CONFIG_FILE=/path/to/Game-Op/dxvk.conf DXVK_ASYNC=1 DXVK_FRAME_PACE=low-latency mesa_glthread=true MESA_NO_ERROR=1 INTEL_PRECISE_TRIG=0 %command%
+```
 
 ---
 
-## Cryptographic Safety & Compliance
-* Is this safe from bans? Yes. Game-Op strictly respects VRChat's Easy Anti-Cheat (EAC). It does not read, write, or touch VRChat's running game memory.
-* Why are key variables scrambled? To protect the project, asset_key_resolver.py dynamically obfuscates all internal VRChat-specific API paths and metadata keys using Base64 in-memory mapping. This prevents automated web crawler flags and keeps the key-extraction mechanism clean and compliant.
+## What it does
+
+### OS booster (Rust engine)
+- Detects your GPU and CPU across Windows, macOS, and Linux.
+- On Linux, sets the CPU governor to performance and raises the game's render
+  threads to high priority, then reverts on exit.
+- On Intel Linux, can pin the iGPU frequency high (see `setup_gpu_permissions.sh`).
+
+### Asset optimization
+- Class-aware texture downscaling: detail textures (face, skin, albedo, normals)
+  keep a larger budget; mask/roughness/metallic maps are scaled down more
+  aggressively.
+- GPU texture-format compression (optional): re-encodes textures into compact
+  GPU formats (BC7, DXT1, or ASTC). VRAM use is `bytes_per_pixel(format) x width
+  x height`, so this shrinks the per-pixel cost and rescues uncompressed
+  textures - up to about 75-87% VRAM for those.
+- Lossless mesh vertex compaction.
+- Live optimization: assets are optimized the moment they finish downloading
+  (via inotify), plus a full sweep on exit.
+
+### Secure local key vault (VRChat)
+- To decrypt VRChat's local cache, per-file keys are cached in `vrc_keys.db`,
+  encrypted with AES-256-GCM.
+- The encryption key is derived at runtime from your machine's hardware ID
+  (PBKDF2-HMAC-SHA256) and is never written to disk. The database is created
+  with owner-only (0600) permissions.
+
+---
+
+## Enabling GPU texture-format compression
+
+This is experimental and off by default. Enable it for a run with:
+
+```bash
+GAME_OP_GPU_COMPRESS=1 ./start_vrc.sh
+# optionally choose a format:
+GAME_OP_GPU_COMPRESS=1 GAME_OP_GPU_FORMAT=bc7 ./start_vrc.sh
+```
+
+Formats: `auto` (opaque -> DXT1, alpha -> BC7), `bc7`, `dxt5`, `bc1`,
+`astc4x4`, `astc5x5`, `astc6x6`, `astc8x8`.
+
+---
+
+## Using the optimizer on any Unity game
+
+The bundle optimizer runs standalone on any Unity asset directory. Use
+`--generic` to skip the VRChat-specific key pipeline:
+
+```bash
+python3 bundle_optimizer.py <input_dir> <output_dir> 1024 --generic --gpu-compress
+```
+
+Run `python3 bundle_optimizer.py --help` for all options.
+
+---
+
+## Measuring results
+
+`validate_on_laptop.py` runs the optimizer on a safe copy of your cache (your
+real cache is never modified) and reports real before/after asset sizes:
+
+```bash
+python3 validate_on_laptop.py --sample 20 --gpu-compress
+```
+
+---
+
+## Platform support
+
+- Portable today: CPU/power tuning, process and GPU detection, and the Unity
+  asset optimizer (any OS, any Unity game).
+- Linux-only today: GPU clock pinning (Intel sysfs), the `start_vrc.sh`
+  launcher, and the permission/DXVK helpers. Windows/macOS launchers are not yet
+  provided.
+
+---
+
+## Repository layout
+
+- `src/` - Rust booster (process watcher, GPU/CPU tuning, asset staging).
+- `bundle_optimizer.py` - Unity bundle texture/mesh optimizer.
+- `asset_key_resolver.py` - background VRChat key-capture proxy and live transcoder.
+- `start_vrc.sh` - one-command launcher and optimizer.
+- `validate_on_laptop.py` - on-machine validation and measurement harness.
+- `setup_gpu_permissions.sh` - udev rules for non-root Intel iGPU frequency control.
+- `dxvk.conf` - tuned DXVK configuration.
 
 ---
 
 ## License
-This project is licensed under the MIT License.
+
+MIT. See the license header in the project.
